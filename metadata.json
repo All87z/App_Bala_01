@@ -1,0 +1,6 @@
+{
+  "name": "Assistente de Balança",
+  "description": "Consulta rápida e offline de códigos de balança comercial com busca instantânea, dígitos extragrandes, pesquisa por voz e cadastro com persistência local.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

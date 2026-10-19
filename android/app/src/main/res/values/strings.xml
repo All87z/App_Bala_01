@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Assistente de Balança</string>
+    <string name="search_placeholder">Pesquisar produto ou código...</string>
+    <string name="initial_banana">Banana prata</string>
+    <string name="initial_batata">Batata inglesa</string>
+    <string name="initial_queijo">Queijo mussarela</string>
+</resources>

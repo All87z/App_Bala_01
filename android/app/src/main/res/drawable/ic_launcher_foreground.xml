@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Ícone estilizado de Balança Comercial em Amarelo -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M54,24v8M34,36l20,-4l20,4M34,36l-8,24h16l-8,-24zM74,36l-8,24h16l-8,-24zM54,32v46M42,78h24"/>
+</vector>
