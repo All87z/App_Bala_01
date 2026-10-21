@@ -497,19 +497,19 @@ fun ProductCard(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.Top
                     ) {
-                        // Imagem de Referência Visual ANTES da palavra / nome (30x30 dp no smartphone vertical)
+                        // Imagem de Referência Visual ANTES da palavra / nome (48x48 dp no smartphone vertical para visualização nítida)
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(10.dp),
                             color = BackgroundDark,
                             border = BorderStroke(1.dp, SurfaceVariantDark),
-                            modifier = Modifier.size(30.dp)
+                            modifier = Modifier.size(48.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Default.Image,
                                     contentDescription = "Foto do produto",
                                     tint = PrimaryYellow,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }

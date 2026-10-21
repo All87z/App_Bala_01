@@ -498,7 +498,7 @@ export default function App() {
               >
                 {/* TOPO NO SMARTPHONE VERTICAL / LADO ESQUERDO NO TABLET E HORIZONTAL */}
                 <div className="flex items-start sm:items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                  {/* IMAGEM DO PRODUTO: Aumentada exatamente para ~30x30px no smartphone vertical (preservando tablet/horizontal) */}
+                  {/* IMAGEM DO PRODUTO: Aumentada para visualização nítida no smartphone vertical (w-12 h-12 / 48x48px, preservando tablet/horizontal sm:w-16 sm:h-16) */}
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
@@ -513,19 +513,19 @@ export default function App() {
                     }
                   >
                     {product.imageUrl ? (
-                      <div className="w-[30px] h-[30px] sm:w-16 sm:h-16 rounded-lg sm:rounded-2xl overflow-hidden bg-slate-950 border border-slate-700/80 group-hover:border-amber-400 transition-all shadow-md flex items-center justify-center shrink-0">
+                      <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl overflow-hidden bg-slate-950 border border-slate-700/80 group-hover:border-amber-400 transition-all shadow-md flex items-center justify-center shrink-0">
                         <img
                           src={product.imageUrl}
                           alt={product.name}
                           className="w-full h-full object-cover"
                         />
-                        <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity rounded-lg sm:rounded-2xl">
-                          <ImagePlus className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-amber-300" />
+                        <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity rounded-xl sm:rounded-2xl">
+                          <ImagePlus className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300" />
                         </div>
                       </div>
                     ) : (
-                      <div className="w-[30px] h-[30px] sm:w-16 sm:h-16 rounded-lg sm:rounded-2xl bg-slate-950 border border-dashed border-slate-700 group-hover:border-amber-400 flex flex-col items-center justify-center text-slate-500 group-hover:text-amber-400 transition-colors shadow-inner shrink-0">
-                        <ImagePlus className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+                      <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-slate-950 border border-dashed border-slate-700 group-hover:border-amber-400 flex flex-col items-center justify-center text-slate-500 group-hover:text-amber-400 transition-colors shadow-inner shrink-0">
+                        <ImagePlus className="w-4 h-4 sm:w-5 sm:h-5" />
                         <span className="hidden sm:inline text-[9px] font-bold mt-0.5 tracking-tight text-slate-400">
                           + Foto
                         </span>
