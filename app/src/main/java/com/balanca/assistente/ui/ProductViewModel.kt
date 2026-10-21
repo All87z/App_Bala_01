@@ -174,12 +174,18 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
             }
 
             if (currentEdit != null) {
-                // Atualização
+                // Atualização: Se imageUri for string vazia "", significa que foi removida
+                val finalImageUri = when {
+                    imageUri == "" -> null
+                    imageUri != null -> imageUri
+                    else -> currentEdit.imageUri
+                }
+
                 val updated = currentEdit.copy(
                     name = cleanName,
                     normalizedName = TextNormalizer.normalize(cleanName),
                     code = cleanCode,
-                    imageUri = imageUri ?: currentEdit.imageUri,
+                    imageUri = finalImageUri,
                     price = price ?: currentEdit.price,
                     unit = unit,
                     isAvailable = isAvailable,
@@ -189,17 +195,18 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                 _statusNotice.value = "Produto \"$cleanName\" atualizado."
             } else {
                 // Novo cadastro
+                val finalImageUri = if (imageUri.isNullOrEmpty()) null else imageUri
                 val newProduct = Product(
                     name = cleanName,
                     normalizedName = TextNormalizer.normalize(cleanName),
                     code = cleanCode,
-                    imageUri = imageUri,
+                    imageUri = finalImageUri,
                     price = price,
                     unit = unit,
                     isAvailable = isAvailable
                 )
                 dao.insert(newProduct)
-                _statusNotice.value = "Produto \"$cleanName\" adicionado."
+                _statusNotice.value = "Produto \"$cleanName\" adicionado com sucesso."
             }
 
             _isAddEditDialogOpen.value = false
@@ -220,11 +227,12 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
         return CsvHelper.exportToCsv(allProducts.value)
     }
 
-    // Importação CSV
+    // Importação CSV com suporte a todos os campos
     fun importFromCsv(inputStream: InputStream) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val list = CsvHelper.parseCsv(inputStream)
+                val parseResult = CsvHelper.parseCsv(inputStream)
+                val list = parseResult.validProducts
                 if (list.isEmpty()) {
                     _statusNotice.value = "Nenhum produto válido encontrado no arquivo CSV."
                     return@launch
@@ -233,7 +241,16 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                 for (p in list) {
                     val existing = dao.getByCode(p.code)
                     if (existing != null) {
-                        dao.update(existing.copy(name = p.name, normalizedName = p.normalizedName))
+                        dao.update(
+                            existing.copy(
+                                name = p.name,
+                                normalizedName = p.normalizedName,
+                                price = p.price ?: existing.price,
+                                unit = p.unit,
+                                isAvailable = p.isAvailable,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
                     } else {
                         dao.insert(p)
                     }
@@ -242,6 +259,54 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                 _statusNotice.value = "$importedCount produtos importados com sucesso do CSV."
             } catch (e: Exception) {
                 _statusNotice.value = "Erro ao importar CSV: ${e.localizedMessage}"
+            }
+        }
+    }
+
+    // Exportação Backup ZIP Completo (com fotos)
+    fun exportZip(context: Context, outputStream: java.io.OutputStream) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                CsvHelper.exportZipBackup(allProducts.value, context, outputStream)
+                _statusNotice.value = "Backup completo ZIP exportado com sucesso."
+            } catch (e: Exception) {
+                _statusNotice.value = "Erro ao exportar backup ZIP: ${e.localizedMessage}"
+            }
+        }
+    }
+
+    // Restauração Backup ZIP Completo (com fotos)
+    fun importZip(context: Context, inputStream: InputStream) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val list = CsvHelper.importZipBackup(inputStream, context)
+                if (list.isEmpty()) {
+                    _statusNotice.value = "Nenhum produto válido encontrado no backup ZIP."
+                    return@launch
+                }
+                var count = 0
+                for (p in list) {
+                    val existing = dao.getByCode(p.code)
+                    if (existing != null) {
+                        dao.update(
+                            existing.copy(
+                                name = p.name,
+                                normalizedName = p.normalizedName,
+                                price = p.price ?: existing.price,
+                                unit = p.unit,
+                                isAvailable = p.isAvailable,
+                                imageUri = p.imageUri ?: existing.imageUri,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+                    } else {
+                        dao.insert(p)
+                    }
+                    count++
+                }
+                _statusNotice.value = "$count produtos e fotos restaurados do backup ZIP."
+            } catch (e: Exception) {
+                _statusNotice.value = "Erro ao restaurar backup ZIP: ${e.localizedMessage}"
             }
         }
     }
