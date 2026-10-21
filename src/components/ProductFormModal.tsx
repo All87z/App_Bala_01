@@ -240,7 +240,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 {imageUrl && (
                   <button
                     type="button"
-                    onClick={() => setImageUrl(undefined)}
+                    onClick={() => setImageUrl('')}
                     disabled={isProcessingImage}
                     className="flex items-center justify-center gap-1 text-[11px] text-red-400 hover:text-red-300 py-0.5 transition-colors"
                   >

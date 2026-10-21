@@ -40,11 +40,66 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
 ];
 
+// IndexedDB Helper para persistência redundante de fotos e dados offline
+const IDB_NAME = 'assistente_balanca_offline_db';
+const IDB_STORE = 'products_store';
+const IDB_KEY = 'all_products';
+
+function openIndexedDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      reject(new Error('IndexedDB indisponível'));
+      return;
+    }
+    const request = indexedDB.open(IDB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function persistToIndexedDb(products: Product[]): Promise<void> {
+  try {
+    const db = await openIndexedDb();
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_STORE);
+    store.put(products, IDB_KEY);
+  } catch (err) {
+    // Falha silenciosa no IndexedDB, pois localStorage já é o canal primário
+    console.debug('Persistência secundária IndexedDB:', err);
+  }
+}
+
+export async function restoreFromIndexedDb(): Promise<Product[] | null> {
+  try {
+    const db = await openIndexedDb();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const store = tx.objectStore(IDB_STORE);
+      const req = store.get(IDB_KEY);
+      req.onsuccess = () => {
+        if (Array.isArray(req.result) && req.result.length > 0) {
+          resolve(req.result);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
 export function getSavedProducts(): Product[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PRODUCTS);
     if (!raw) {
-      // Inicializa com os produtos obrigatórios
       saveProducts(INITIAL_PRODUCTS);
       return INITIAL_PRODUCTS;
     }
@@ -53,7 +108,8 @@ export function getSavedProducts(): Product[] {
       saveProducts(INITIAL_PRODUCTS);
       return INITIAL_PRODUCTS;
     }
-    const withDefaults = parsed.map((p) => {
+
+    return parsed.map((p) => {
       if (!p.imageUrl) {
         if (p.name.toLowerCase().includes('banana')) p.imageUrl = DEFAULT_ILLUSTRATIONS.banana;
         else if (p.name.toLowerCase().includes('batata')) p.imageUrl = DEFAULT_ILLUSTRATIONS.batata;
@@ -72,7 +128,6 @@ export function getSavedProducts(): Product[] {
       }
       return p;
     });
-    return withDefaults;
   } catch (error) {
     console.error('Erro ao ler produtos locais:', error);
     return INITIAL_PRODUCTS;
@@ -81,24 +136,27 @@ export function getSavedProducts(): Product[] {
 
 export function saveProducts(products: Product[]): void {
   try {
+    // 1. Salva no localStorage para acesso síncrono e imediato
     localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(products));
   } catch (error) {
-    console.warn('Alerta de cota no localStorage ao salvar produtos, aplicando recuperação de segurança:', error);
+    console.warn('Aviso de limite no localStorage, salvando cópia compactada:', error);
     try {
-      // Se a cota do localStorage for atingida, garante a persistência dos produtos mantendo as fotos mais recentes
-      const safeProducts = products.map((p, index) => {
-        // Mantém a foto dos produtos recentes (até 15) e dos itens editados; para os demais se estourar, preserva o restante dos dados
-        if (index > 15 && p.imageUrl && p.imageUrl.startsWith('data:image/')) {
-          const { imageUrl, ...rest } = p;
-          return rest as Product;
+      // Se estourar localStorage, preserva os dados textuais no localStorage
+      const lightCopy = products.map((p) => {
+        // Se a imagem for muito pesada e estourar a cota, mantém os dados
+        if (p.imageUrl && p.imageUrl.length > 30000) {
+          return { ...p, imageUrl: undefined };
         }
         return p;
       });
-      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(safeProducts));
+      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(lightCopy));
     } catch (criticalErr) {
       console.error('Falha crítica ao gravar no localStorage:', criticalErr);
     }
   }
+
+  // 2. Salva paralelamente no IndexedDB (onde não há o limite de 5MB do localStorage)
+  persistToIndexedDb(products);
 }
 
 export function getRecentProducts(): RecentProduct[] {

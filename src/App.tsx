@@ -12,10 +12,9 @@ import {
   Upload,
   Smartphone,
   X,
-  AlertTriangle,
   Info,
-  Sparkles,
   ImagePlus,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Product, RecentProduct } from './types';
 import {
@@ -24,15 +23,17 @@ import {
   getRecentProducts,
   addRecentProduct,
   removeRecentByCode,
+  restoreFromIndexedDb,
 } from './utils/storage';
 import { matchProduct } from './utils/textNormalizer';
-import { downloadCsvFile, parseCsvContent } from './utils/csv';
+import { downloadCsvFile } from './utils/csv';
 import { processGalleryImage } from './utils/imageHelper';
 import { SpotlightModal } from './components/SpotlightModal';
 import { ProductFormModal } from './components/ProductFormModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { VoiceSearchButton } from './components/VoiceSearchButton';
 import { AndroidProjectModal } from './components/AndroidProjectModal';
+import { DataBackupModal } from './components/DataBackupModal';
 
 export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -46,16 +47,23 @@ export default function App() {
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isAndroidModalOpen, setIsAndroidModalOpen] = useState(false);
+  const [isDataBackupModalOpen, setIsDataBackupModalOpen] = useState(false);
 
   // Notificação / Aviso amigável (ex: voz offline ou sucesso)
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Carrega produtos do armazenamento local offline na inicialização
   useEffect(() => {
     const loaded = getSavedProducts();
     setProducts(loaded);
     setRecentProducts(getRecentProducts());
+
+    // Se o IndexedDB tiver fotos ou produtos persistidos, sincroniza
+    restoreFromIndexedDb().then((idbProducts) => {
+      if (idbProducts && idbProducts.length >= loaded.length) {
+        setProducts(idbProducts);
+      }
+    });
   }, []);
 
   // Mostra aviso temporário
@@ -115,6 +123,9 @@ export default function App() {
     isAvailable?: boolean
   ) => {
     let updated: Product[];
+    // Se imageUrl for string vazia '', significa que a foto foi explicitamente removida
+    const finalImageUrl = imageUrl === '' ? undefined : imageUrl;
+
     if (idToEdit) {
       updated = products.map((p) =>
         p.id === idToEdit
@@ -122,7 +133,7 @@ export default function App() {
               ...p,
               name,
               code,
-              imageUrl: imageUrl !== undefined ? imageUrl : p.imageUrl,
+              imageUrl: imageUrl !== undefined ? finalImageUrl : p.imageUrl,
               price: price !== undefined ? price : p.price,
               unit: unit !== undefined ? unit : p.unit,
               isAvailable: isAvailable !== undefined ? isAvailable : (p.isAvailable ?? true),
@@ -136,7 +147,7 @@ export default function App() {
         id: `prod-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         name,
         code,
-        imageUrl,
+        imageUrl: finalImageUrl,
         price: price || '',
         unit: unit || 'kg',
         isAvailable: isAvailable ?? true,
@@ -162,67 +173,96 @@ export default function App() {
     showToast(`Produto "${product.name}" removido.`);
   };
 
-  // Exportar CSV
+  // Exportar CSV direto
   const handleExportCsv = () => {
     downloadCsvFile(products, 'produtos_balanca.csv');
     showToast('Arquivo CSV baixado com sucesso!');
   };
 
-  // Importar CSV
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Importar CSV vindo do modal de Importar/Exportar dados
+  const handleImportProductsFromCsv = (
+    importedList: Array<{
+      name: string;
+      code: string;
+      price?: string;
+      unit?: string;
+      isAvailable?: boolean;
+    }>,
+    mode: 'merge' | 'skipDuplicates' | 'replace'
+  ) => {
+    let result: Product[] = [];
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string;
-        const parsed = parseCsvContent(text);
-        if (parsed.length === 0) {
-          showToast('Nenhum produto válido encontrado no arquivo CSV.');
-          return;
+    if (mode === 'replace') {
+      result = importedList.map((item) => ({
+        id: `prod-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        name: item.name,
+        code: item.code,
+        price: item.price || '',
+        unit: item.unit || 'kg',
+        isAvailable: item.isAvailable ?? true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }));
+      showToast(`${result.length} produtos importados (catálogo substituído).`);
+    } else if (mode === 'skipDuplicates') {
+      const existingCodes = new Set(products.map((p) => p.code.toLowerCase()));
+      const newOnly = importedList.filter((item) => !existingCodes.has(item.code.toLowerCase()));
+      const newItems: Product[] = newOnly.map((item) => ({
+        id: `prod-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        name: item.name,
+        code: item.code,
+        price: item.price || '',
+        unit: item.unit || 'kg',
+        isAvailable: item.isAvailable ?? true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }));
+      result = [...newItems, ...products];
+      showToast(`${newItems.length} novos produtos adicionados (duplicados mantidos).`);
+    } else {
+      // merge (Recomendado): atualiza dados existentes preservando as fotos, e adiciona novos
+      const currentMap = new Map(products.map((p) => [p.code.toLowerCase(), { ...p }]));
+      let updatedCount = 0;
+      let newCount = 0;
+
+      for (const item of importedList) {
+        const existing = currentMap.get(item.code.toLowerCase());
+        if (existing) {
+          existing.name = item.name;
+          if (item.price !== undefined) existing.price = item.price;
+          if (item.unit !== undefined) existing.unit = item.unit;
+          if (item.isAvailable !== undefined) existing.isAvailable = item.isAvailable;
+          existing.updatedAt = Date.now();
+          // Preserva foto existente do produto!
+          updatedCount++;
+        } else {
+          const fresh: Product = {
+            id: `prod-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            name: item.name,
+            code: item.code,
+            price: item.price || '',
+            unit: item.unit || 'kg',
+            isAvailable: item.isAvailable ?? true,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          currentMap.set(item.code.toLowerCase(), fresh);
+          newCount++;
         }
-
-        const currentMap = new Map(products.map((p) => [p.code.toLowerCase(), p]));
-        let importedCount = 0;
-
-        const newItems: Product[] = [];
-        for (const item of parsed) {
-          const existing = currentMap.get(item.code.toLowerCase());
-          if (existing) {
-            existing.name = item.name;
-            if (item.price !== undefined) existing.price = item.price;
-            if (item.unit !== undefined) existing.unit = item.unit;
-            if (item.isAvailable !== undefined) existing.isAvailable = item.isAvailable;
-            existing.updatedAt = Date.now();
-          } else {
-            const fresh: Product = {
-              id: `prod-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-              name: item.name,
-              code: item.code,
-              price: item.price || '',
-              unit: item.unit || 'kg',
-              isAvailable: item.isAvailable ?? true,
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-            };
-            currentMap.set(item.code.toLowerCase(), fresh);
-            newItems.push(fresh);
-          }
-          importedCount++;
-        }
-
-        const merged = Array.from(currentMap.values());
-        setProducts(merged);
-        saveProducts(merged);
-        showToast(`${importedCount} produtos importados do CSV com sucesso!`);
-      } catch (err) {
-        showToast('Erro ao processar o arquivo CSV.');
       }
-    };
-    reader.readAsText(file);
-    // Limpa o valor do input para permitir selecionar o mesmo arquivo novamente
-    e.target.value = '';
+      result = Array.from(currentMap.values());
+      showToast(`CSV importado: ${newCount} novos, ${updatedCount} atualizados.`);
+    }
+
+    setProducts(result);
+    saveProducts(result);
+  };
+
+  // Restaurar Backup Completo com Fotos
+  const handleRestoreFullBackup = (restored: Product[]) => {
+    setProducts(restored);
+    saveProducts(restored);
+    showToast(`Backup completo restaurado com sucesso! (${restored.length} produtos)`);
   };
 
   // Filtro em tempo real: ignora acentos, maiúsculas e busca por nome ou código
@@ -250,7 +290,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {/* Botão Ver Código & Gerar APK Android */}
             <button
               onClick={() => setIsAndroidModalOpen(true)}
@@ -261,30 +301,35 @@ export default function App() {
               <span>Gerar APK Android</span>
             </button>
 
-            {/* Exportar CSV */}
+            {/* Área Simples: Importar/Exportar Dados (CSV e Fotos) */}
+            <button
+              onClick={() => setIsDataBackupModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-white border border-slate-700 text-xs font-bold transition-all shadow-sm"
+              title="Área de Importar/Exportar dados e backup de fotos"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-sky-400 shrink-0" />
+              <span className="hidden md:inline">Importar/Exportar dados</span>
+              <span className="md:hidden">Backup</span>
+            </button>
+
+            {/* Atalho Exportar CSV Rápido */}
             <button
               onClick={handleExportCsv}
-              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
-              title="Exportar produtos para arquivo CSV"
+              className="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
+              title="Baixar arquivo CSV direto"
             >
               <Download className="w-4 h-4" />
             </button>
 
-            {/* Importar CSV */}
+            {/* Atalho Importar CSV (Abre área de prévia segura) */}
             <button
-              onClick={() => fileInputRef.current?.click()}
-              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
+              onClick={() => setIsDataBackupModalOpen(true)}
+              className="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
               title="Importar produtos de arquivo CSV"
             >
               <Upload className="w-4 h-4" />
             </button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".csv,text/csv"
-              className="hidden"
-            />
+
             <input
               type="file"
               ref={cardImageInputRef}
@@ -299,7 +344,7 @@ export default function App() {
                 setProductToEdit(null);
                 setIsFormOpen(true);
               }}
-              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm transition-all shadow-md active:scale-95"
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm transition-all shadow-md active:scale-95 ml-1"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span className="hidden xs:inline">Novo Produto</span>
@@ -424,16 +469,25 @@ export default function App() {
                   ? `Não encontramos resultados para "${searchQuery}". Deseja cadastrar agora?`
                   : 'Comece adicionando seu primeiro produto ou importando um arquivo CSV.'}
               </p>
-              <button
-                onClick={() => {
-                  setProductToEdit(null);
-                  setIsFormOpen(true);
-                }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm shadow-md transition-all"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Cadastrar Produto</span>
-              </button>
+              <div className="flex flex-wrap gap-2 justify-center">
+                <button
+                  onClick={() => {
+                    setProductToEdit(null);
+                    setIsFormOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm shadow-md transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Cadastrar Produto</span>
+                </button>
+                <button
+                  onClick={() => setIsDataBackupModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-bold text-sm shadow-md transition-all"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-sky-400" />
+                  <span>Importar/Exportar dados</span>
+                </button>
+              </div>
             </div>
           ) : (
             filteredProducts.map((product) => (
@@ -444,7 +498,7 @@ export default function App() {
               >
                 {/* TOPO NO SMARTPHONE VERTICAL / LADO ESQUERDO NO TABLET E HORIZONTAL */}
                 <div className="flex items-start sm:items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                  {/* Imagem de Referência da Galeria ANTES da palavra */}
+                  {/* IMAGEM DO PRODUTO: Aumentada exatamente para ~30x30px no smartphone vertical (preservando tablet/horizontal) */}
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
@@ -459,20 +513,20 @@ export default function App() {
                     }
                   >
                     {product.imageUrl ? (
-                      <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-slate-950 border-2 border-slate-700/80 group-hover:border-amber-400 transition-all shadow-md flex items-center justify-center">
+                      <div className="w-[30px] h-[30px] sm:w-16 sm:h-16 rounded-lg sm:rounded-2xl overflow-hidden bg-slate-950 border border-slate-700/80 group-hover:border-amber-400 transition-all shadow-md flex items-center justify-center shrink-0">
                         <img
                           src={product.imageUrl}
                           alt={product.name}
                           className="w-full h-full object-cover"
                         />
-                        <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity rounded-2xl">
-                          <ImagePlus className="w-5 h-5 text-amber-300" />
+                        <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity rounded-lg sm:rounded-2xl">
+                          <ImagePlus className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-amber-300" />
                         </div>
                       </div>
                     ) : (
-                      <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-slate-950 border-2 border-dashed border-slate-700 group-hover:border-amber-400 flex flex-col items-center justify-center text-slate-500 group-hover:text-amber-400 transition-colors shadow-inner">
-                        <ImagePlus className="w-5 h-5" />
-                        <span className="text-[9px] font-bold mt-0.5 tracking-tight text-slate-400">
+                      <div className="w-[30px] h-[30px] sm:w-16 sm:h-16 rounded-lg sm:rounded-2xl bg-slate-950 border border-dashed border-slate-700 group-hover:border-amber-400 flex flex-col items-center justify-center text-slate-500 group-hover:text-amber-400 transition-colors shadow-inner shrink-0">
+                        <ImagePlus className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+                        <span className="hidden sm:inline text-[9px] font-bold mt-0.5 tracking-tight text-slate-400">
                           + Foto
                         </span>
                       </div>
@@ -645,6 +699,15 @@ export default function App() {
       <AndroidProjectModal
         isOpen={isAndroidModalOpen}
         onClose={() => setIsAndroidModalOpen(false)}
+      />
+
+      {/* Modal da Área: Importar/Exportar Dados (CSV com prévia segura e Backup com Fotos) */}
+      <DataBackupModal
+        isOpen={isDataBackupModalOpen}
+        products={products}
+        onClose={() => setIsDataBackupModalOpen(false)}
+        onImportProducts={handleImportProductsFromCsv}
+        onRestoreFullBackup={handleRestoreFullBackup}
       />
     </div>
   );
