@@ -1,7 +1,8 @@
+
 name: Compilação Android (APK)
 
 on:
-  workflow_dispatch: # Permite disparar manualmente pelo botão "Run workflow" na aba Actions do GitHub
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -17,57 +18,58 @@ concurrency:
 
 jobs:
   build-apk:
-    name: Compilar APK Debug (Kotlin + Jetpack Compose)
+    name: Compilar APK Android
     runs-on: ubuntu-latest
 
     permissions:
       contents: read
 
     steps:
-      - name: 1. Baixar código do repositório (Checkout)
+      - name: 1. Baixar código do repositório
         uses: actions/checkout@v4
 
-      - name: 2. Configurar JDK 17 (Java)
+      - name: 2. Configurar Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
-          cache: 'gradle'
+          cache: gradle
 
       - name: 3. Configurar Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
 
-      - name: 4. Aceitar licenças do Android SDK
+      - name: 4. Verificar arquivos do projeto
         run: |
-          yes | sdkmanager --licenses || true
-
-      - name: 5. Conceder permissão de execução ao Gradle Wrapper
-        run: |
+          echo "Verificando estrutura do projeto..."
+          ls -la
           if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-          fi
-          if [ -f "./android/gradlew" ]; then
-            chmod +x ./android/gradlew
-          fi
-
-      - name: 6. Compilar APK com Gradle (assembleDebug)
-        run: |
-          if [ -f "./gradlew" ]; then
-            ./gradlew assembleDebug --stacktrace
+            echo "Gradle Wrapper encontrado na raiz."
           elif [ -f "./android/gradlew" ]; then
-            cd android
-            ./gradlew assembleDebug --stacktrace
+            echo "Gradle Wrapper encontrado na pasta android."
           else
-            echo "Erro: gradlew não encontrado!"
+            echo "ERRO: gradlew não encontrado."
+            echo "O projeto pode não estar configurado como projeto Android nativo."
             exit 1
           fi
 
-      - name: 7. Publicar APK como Artefato para Download
+      - name: 5. Compilar APK
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug --no-daemon --stacktrace
+          elif [ -f "./android/gradlew" ]; then
+            cd android
+            chmod +x ./gradlew
+            ./gradlew assembleDebug --no-daemon --stacktrace
+          fi
+
+      - name: 6. Disponibilizar APK para download
         uses: actions/upload-artifact@v4
         with:
           name: assistente-de-balanca-debug-apk
           path: |
-            app/build/outputs/apk/debug/*.apk
-            android/app/build/outputs/apk/debug/*.apk
-          retention-days: 14
+            **/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 14
