@@ -75,8 +75,21 @@ async function persistToIndexedDb(products: Product[]): Promise<void> {
   }
 }
 
-export async function restoreFromIndexedDb(): Promise<Product[] | null> {
+export async function restoreFromIndexedDbIfEmpty(): Promise<Product[] | null> {
   try {
+    const raw = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+    // Se o localStorage já tiver produtos válidos, ele é a fonte síncrona definitiva
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return null;
+        }
+      } catch {
+        // Se estiver corrompido, tenta recuperar do IndexedDB
+      }
+    }
+
     const db = await openIndexedDb();
     return new Promise((resolve) => {
       const tx = db.transaction(IDB_STORE, 'readonly');
@@ -84,6 +97,10 @@ export async function restoreFromIndexedDb(): Promise<Product[] | null> {
       const req = store.get(IDB_KEY);
       req.onsuccess = () => {
         if (Array.isArray(req.result) && req.result.length > 0) {
+          // Restaura também para o localStorage
+          try {
+            localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(req.result));
+          } catch {}
           resolve(req.result);
         } else {
           resolve(null);
@@ -155,7 +172,7 @@ export function saveProducts(products: Product[]): void {
     }
   }
 
-  // 2. Salva paralelamente no IndexedDB (onde não há o limite de 5MB do localStorage)
+  // 2. Salva paralelamente no IndexedDB para redundância offline
   persistToIndexedDb(products);
 }
 

@@ -15,31 +15,18 @@ export async function processGalleryImage(file: File): Promise<string> {
 
     img.onload = () => {
       try {
-        const MAX_SIZE = 240; // Ideal para 30x30px no card e preview detalhado no modal
-        let width = img.naturalWidth || img.width;
-        let height = img.naturalHeight || img.height;
+        const TARGET_SIZE = 240; // Ideal para os cartões (56px a 72px) e preview no modal
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
 
         if (!width || !height) {
-          // Se não conseguir ler dimensões, retorna o dataUrl bruto diretamente
           resolve(rawDataUrl);
           return;
         }
 
-        if (width > height) {
-          if (width > MAX_SIZE) {
-            height = Math.round((height * MAX_SIZE) / width);
-            width = MAX_SIZE;
-          }
-        } else {
-          if (height > MAX_SIZE) {
-            width = Math.round((width * MAX_SIZE) / height);
-            height = MAX_SIZE;
-          }
-        }
-
         const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, width);
-        canvas.height = Math.max(1, height);
+        canvas.width = TARGET_SIZE;
+        canvas.height = TARGET_SIZE;
         const ctx = canvas.getContext('2d');
 
         if (!ctx) {
@@ -47,13 +34,22 @@ export async function processGalleryImage(file: File): Promise<string> {
           return;
         }
 
-        // Fundo escuro padrão do app para imagens PNG com transparência
+        // Fundo escuro padrão do aplicativo para transparências
         ctx.fillStyle = '#0f172a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, TARGET_SIZE, TARGET_SIZE);
 
-        // Exporta como JPEG otimizado
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        // Enquadramento proporcional central (Center Crop / Cover)
+        // Garante foto quadrada perfeita, exatamente como na referência visual
+        const scale = Math.max(TARGET_SIZE / width, TARGET_SIZE / height);
+        const scaledWidth = width * scale;
+        const scaledHeight = height * scale;
+        const offsetX = (TARGET_SIZE - scaledWidth) / 2;
+        const offsetY = (TARGET_SIZE - scaledHeight) / 2;
+
+        ctx.drawImage(img, offsetX, offsetY, scaledWidth, scaledHeight);
+
+        // Exporta como JPEG otimizado (~10KB a 16KB), altamente persistente e leve
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
         resolve(compressedDataUrl);
       } catch (err) {
         console.warn('Fallback para imagem original por erro no canvas:', err);

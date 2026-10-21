@@ -486,106 +486,96 @@ fun ProductCard(
 
             if (isCompact) {
                 // SMARTPHONE NA ORIENTAÇÃO VERTICAL (PORTRAIT: 320dp - 430dp)
-                // Layout em 2 linhas independentes para evitar qualquer sobreposição ou corte de texto
-                Column(
+                // Layout linear seguindo a hierarquia da referência visual sem nenhuma sobreposição
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp)
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    // ÁREA SUPERIOR: Foto + Nome Completo sem cortes + Badge
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top
+                    // 2. FOTO QUADRADA PROPORCIONAL: 64dp (faixa entre 56dp e 72dp)
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = BackgroundDark,
+                        border = BorderStroke(1.dp, SurfaceVariantDark),
+                        modifier = Modifier.size(64.dp)
                     ) {
-                        // Imagem de Referência Visual ANTES da palavra / nome (48x48 dp no smartphone vertical para visualização nítida)
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Image,
+                                contentDescription = "Foto do produto",
+                                tint = PrimaryYellow,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    // COLUNA CENTRAL: HIERARQUIA CONFORME REFERÊNCIA VISUAL
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        // 1. CÓDIGO DO PRODUTO: MAIOR DESTAQUE VISUAL
+                        Text(
+                            text = product.code,
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Monospace,
+                                color = PrimaryYellow,
+                                letterSpacing = 1.sp
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        // 3. NOME COMPLETO: LEGÍVEL E COM QUEBRA AUTOMÁTICA DE LINHA
+                        Text(
+                            text = product.name,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextLight,
+                                lineHeight = 20.sp
+                            ),
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // 4. STATUS DISPONÍVEL OU ESGOTADO: SEMPRE VISÍVEL
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = BackgroundDark,
-                            border = BorderStroke(1.dp, SurfaceVariantDark),
-                            modifier = Modifier.size(48.dp)
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (product.isAvailable) AccentGreen.copy(alpha = 0.2f) else DangerRed.copy(alpha = 0.2f),
+                            border = BorderStroke(1.dp, if (product.isAvailable) AccentGreen.copy(alpha = 0.5f) else DangerRed.copy(alpha = 0.5f))
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.Image,
-                                    contentDescription = "Foto do produto",
-                                    tint = PrimaryYellow,
-                                    modifier = Modifier.size(24.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(if (product.isAvailable) AccentGreen else DangerRed)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (product.isAvailable) "Disponível" else "Esgotado",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (product.isAvailable) AccentGreen else DangerRed
+                                    )
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
-                        // Coluna do Nome e Status: ocupa toda a largura restante sem restrições
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                        ) {
-                            Text(
-                                text = product.name,
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontSize = 17.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextLight,
-                                    lineHeight = 21.sp
-                                ),
-                                maxLines = 4,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            // Badge de Disponibilidade
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (product.isAvailable) AccentGreen.copy(alpha = 0.2f) else DangerRed.copy(alpha = 0.2f),
-                                border = BorderStroke(1.dp, if (product.isAvailable) AccentGreen.copy(alpha = 0.5f) else DangerRed.copy(alpha = 0.5f))
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(6.dp)
-                                            .clip(CircleShape)
-                                            .background(if (product.isAvailable) AccentGreen else DangerRed)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = if (product.isAvailable) "Disponível" else "Esgotado",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (product.isAvailable) AccentGreen else DangerRed
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Divisor sutil separando os blocos
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(SurfaceVariantDark.copy(alpha = 0.6f))
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // ÁREA INFERIOR: Preço Completo à esquerda + Código Destacado e Ações à direita
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        // Preço Completo
+                        // 5. PREÇO E UNIDADE JUNTOS NA MESMA LINHA: R$ 8,99 / kg
                         if (!product.price.isNullOrEmpty()) {
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
@@ -594,7 +584,7 @@ fun ProductCard(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.Bottom,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 ) {
                                     Text(
                                         text = "R$ ",
@@ -616,7 +606,7 @@ fun ProductCard(
                                     Text(
                                         text = "/${product.unit}",
                                         style = MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 10.sp,
+                                            fontSize = 11.sp,
                                             color = TextMuted
                                         )
                                     )
@@ -631,86 +621,49 @@ fun ProductCard(
                                 )
                             )
                         }
+                    }
 
-                        // Código Destacado + Botões (Área totalmente independente)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.End
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // LADO DIREITO: AÇÕES (COPIAR, EDITAR, EXCLUIR)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        IconButton(
+                            onClick = onCopyClick,
+                            modifier = Modifier.size(36.dp)
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = BackgroundDark,
-                                border = BorderStroke(2.dp, PrimaryYellow.copy(alpha = 0.9f))
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-                                ) {
-                                    Text(
-                                        text = "CÓDIGO",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 8.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = TextMuted,
-                                            letterSpacing = 0.5.sp
-                                        )
-                                    )
-                                    Text(
-                                        text = product.code,
-                                        style = MaterialTheme.typography.headlineMedium.copy(
-                                            fontSize = 24.sp,
-                                            fontWeight = FontWeight.Black,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = PrimaryYellow,
-                                            letterSpacing = 1.sp
-                                        )
-                                    )
-                                }
-                            }
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copiar Código",
+                                tint = CodeHighlight,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
 
-                            Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = onEditClick,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Editar",
+                                tint = TextMuted,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
 
-                            // Botões de Copiar, Editar e Excluir
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                IconButton(
-                                    onClick = onCopyClick,
-                                    modifier = Modifier.size(34.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "Copiar Código",
-                                        tint = CodeHighlight,
-                                        modifier = Modifier.size(19.dp)
-                                    )
-                                }
-
-                                IconButton(
-                                    onClick = onEditClick,
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = "Editar",
-                                        tint = TextMuted,
-                                        modifier = Modifier.size(17.dp)
-                                    )
-                                }
-
-                                IconButton(
-                                    onClick = onDeleteClick,
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Excluir",
-                                        tint = DangerRed.copy(alpha = 0.85f),
-                                        modifier = Modifier.size(17.dp)
-                                    )
-                                }
-                            }
+                        IconButton(
+                            onClick = onDeleteClick,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Excluir",
+                                tint = DangerRed.copy(alpha = 0.85f),
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
                 }

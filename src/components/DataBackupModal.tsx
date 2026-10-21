@@ -19,8 +19,8 @@ import {
   downloadCsvFile,
   parseCsvContent,
   CsvParseResult,
-  downloadFullBackup,
-  parseFullBackup,
+  downloadFullBackupZip,
+  parseBackupFile,
 } from '../utils/csv';
 
 interface DataBackupModalProps {
@@ -128,38 +128,39 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
     onClose();
   };
 
-  // Lógica de Backup Completo com Fotos
-  const handleFullBackupSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Lógica de Backup Completo com Fotos (.ZIP ou .JSON)
+  const [isProcessingBackupFile, setIsProcessingBackupFile] = useState(false);
+
+  const handleFullBackupSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setBackupRestoreError(null);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string;
-        const parsedProducts = parseFullBackup(text);
-        if (parsedProducts.length === 0) {
-          setBackupRestoreError('Nenhum produto válido encontrado no arquivo de backup.');
-          setBackupRestorePreview(null);
-          return;
-        }
+    setIsProcessingBackupFile(true);
 
-        const withPhotos = parsedProducts.filter((p) => !!p.imageUrl).length;
-        setBackupRestorePreview({
-          total: parsedProducts.length,
-          withPhotos,
-          items: parsedProducts,
-        });
-      } catch (err: any) {
-        setBackupRestoreError(
-          'Arquivo inválido. Escolha um arquivo .json gerado pelo Assistente de Balança.'
-        );
+    try {
+      const parsedProducts = await parseBackupFile(file);
+      if (parsedProducts.length === 0) {
+        setBackupRestoreError('Nenhum produto válido encontrado no arquivo de backup.');
         setBackupRestorePreview(null);
+        return;
       }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
+
+      const withPhotos = parsedProducts.filter((p) => !!p.imageUrl).length;
+      setBackupRestorePreview({
+        total: parsedProducts.length,
+        withPhotos,
+        items: parsedProducts,
+      });
+    } catch (err: any) {
+      setBackupRestoreError(
+        err?.message || 'Arquivo de backup inválido. Escolha um arquivo .zip ou .json válido do Assistente de Balança.'
+      );
+      setBackupRestorePreview(null);
+    } finally {
+      setIsProcessingBackupFile(false);
+      e.target.value = '';
+    }
   };
 
   const handleConfirmRestoreFullBackup = () => {
@@ -529,35 +530,35 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
           )}
 
           {/* ==================================================== */}
-          {/* ABA 3: BACKUP COMPLETO SEPARADO (INCLUINDO FOTOS)    */}
+          {/* ABA 3: BACKUP COMPLETO EM ARQUIVO ZIP (COM FOTOS)    */}
           {/* ==================================================== */}
           {activeTab === 'fullBackup' && (
             <div className="space-y-4">
               <div className="p-3 bg-sky-950/40 border border-sky-500/30 rounded-2xl text-xs text-sky-200 leading-relaxed flex items-start gap-2">
                 <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
                 <span>
-                  O CSV padrão não armazena fotos reais. Este mecanismo de backup completo
-                  salva ou restaura <strong>todos os produtos JUNTO com as fotos da galeria</strong> (em base64) para troca de aparelho ou segurança offline.
+                  O backup em <strong>arquivo ZIP</strong> é o formato mais completo: ele empacota a lista de produtos, uma planilha CSV e <strong>todas as fotos da galeria</strong> em uma pasta organizada para transferência segura entre celulares e restauração offline.
                 </span>
               </div>
 
-              {/* Botão de Exportar Backup Completo */}
+              {/* Botão de Exportar Backup Completo ZIP */}
               <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-between gap-3">
                 <div>
-                  <h4 className="text-xs sm:text-sm font-bold text-white">
-                    Exportar Backup Completo
+                  <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+                    <Archive className="w-4 h-4 text-sky-400" />
+                    <span>Exportar Backup Completo (ZIP)</span>
                   </h4>
                   <p className="text-[11px] text-slate-400">
-                    Inclui fotos, preços, unidades e dados completos
+                    Gera pacote ZIP com dados, CSV e pasta de fotos
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => downloadFullBackup(products)}
-                  className="py-2 px-3.5 rounded-xl bg-sky-400 hover:bg-sky-300 text-slate-950 font-bold text-xs shrink-0 flex items-center gap-1.5 shadow-sm active:scale-95"
+                  onClick={() => downloadFullBackupZip(products)}
+                  className="py-2.5 px-3.5 rounded-xl bg-sky-400 hover:bg-sky-300 text-slate-950 font-bold text-xs shrink-0 flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Baixar Backup</span>
+                  <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>Baixar ZIP ({products.length})</span>
                 </button>
               </div>
 
@@ -566,19 +567,20 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h4 className="text-xs sm:text-sm font-bold text-white">
-                      Restaurar Backup com Fotos
+                      Restaurar Backup Completo
                     </h4>
                     <p className="text-[11px] text-slate-400">
-                      Restaura catálogo a partir de arquivo .json salvo anteriormente
+                      Aceita pacotes <strong>.ZIP</strong> ou arquivos <strong>.JSON</strong> salvos anteriormente
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => fileBackupInputRef.current?.click()}
-                    className="py-2 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 shrink-0 flex items-center gap-1.5 active:scale-95"
+                    disabled={isProcessingBackupFile}
+                    className="py-2 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 shrink-0 flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
                   >
                     <Upload className="w-3.5 h-3.5" />
-                    <span>Escolher Backup</span>
+                    <span>{isProcessingBackupFile ? 'Lendo...' : 'Escolher Arquivo'}</span>
                   </button>
                 </div>
 
@@ -586,7 +588,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
                   type="file"
                   ref={fileBackupInputRef}
                   onChange={handleFullBackupSelected}
-                  accept=".json,application/json"
+                  accept=".zip,.json,application/zip,application/json"
                   className="hidden"
                 />
 
@@ -600,7 +602,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
                   <div className="p-3 bg-slate-900 border border-sky-500/40 rounded-xl space-y-2 text-xs animate-in fade-in">
                     <div className="font-bold text-sky-300 flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>Backup válido encontrado</span>
+                      <span>Pacote de backup verificado com sucesso</span>
                     </div>
                     <div className="text-slate-300">
                       Total: <strong>{backupRestorePreview.total} produtos</strong> ({backupRestorePreview.withPhotos} com fotos da galeria).
@@ -610,7 +612,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
                       onClick={handleConfirmRestoreFullBackup}
                       className="w-full py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95"
                     >
-                      Confirmar e Restaurar Catálogo
+                      Confirmar e Restaurar Todos os Produtos e Fotos
                     </button>
                   </div>
                 )}

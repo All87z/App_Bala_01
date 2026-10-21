@@ -23,7 +23,7 @@ import {
   getRecentProducts,
   addRecentProduct,
   removeRecentByCode,
-  restoreFromIndexedDb,
+  restoreFromIndexedDbIfEmpty,
 } from './utils/storage';
 import { matchProduct } from './utils/textNormalizer';
 import { downloadCsvFile } from './utils/csv';
@@ -58,9 +58,9 @@ export default function App() {
     setProducts(loaded);
     setRecentProducts(getRecentProducts());
 
-    // Se o IndexedDB tiver fotos ou produtos persistidos, sincroniza
-    restoreFromIndexedDb().then((idbProducts) => {
-      if (idbProducts && idbProducts.length >= loaded.length) {
+    // Se o localStorage estava limpo/vazio, recupera do IndexedDB de contingência
+    restoreFromIndexedDbIfEmpty().then((idbProducts) => {
+      if (idbProducts && idbProducts.length > 0) {
         setProducts(idbProducts);
       }
     });
@@ -494,110 +494,87 @@ export default function App() {
               <div
                 key={product.id}
                 onClick={() => handleSelectProduct(product)}
-                className="group cursor-pointer bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-400/60 rounded-2xl p-3.5 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 transition-all duration-150 hover:shadow-xl hover:shadow-amber-500/5 active:scale-[0.99]"
+                className="group cursor-pointer bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-400/60 rounded-2xl p-3.5 sm:p-5 flex items-start justify-between gap-3 sm:gap-4 transition-all duration-150 hover:shadow-xl hover:shadow-amber-500/5 active:scale-[0.99]"
               >
-                {/* TOPO NO SMARTPHONE VERTICAL / LADO ESQUERDO NO TABLET E HORIZONTAL */}
-                <div className="flex items-start sm:items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                  {/* IMAGEM DO PRODUTO: Aumentada para visualização nítida no smartphone vertical (w-12 h-12 / 48x48px, preservando tablet/horizontal sm:w-16 sm:h-16) */}
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setProductForCardImage(product.id);
-                      cardImageInputRef.current?.click();
-                    }}
-                    className="relative shrink-0 group/img cursor-pointer mt-0.5 sm:mt-0"
-                    title={
-                      product.imageUrl
-                        ? 'Toque para trocar a imagem da galeria'
-                        : 'Toque para adicionar foto da galeria'
-                    }
-                  >
-                    {product.imageUrl ? (
-                      <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl overflow-hidden bg-slate-950 border border-slate-700/80 group-hover:border-amber-400 transition-all shadow-md flex items-center justify-center shrink-0">
-                        <img
-                          src={product.imageUrl}
-                          alt={product.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity rounded-xl sm:rounded-2xl">
-                          <ImagePlus className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300" />
-                        </div>
+                {/* 2. FOTO QUADRADA PROPORCIONAL: 64px no mobile, 72px no tablet (faixa 56px a 72px) */}
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setProductForCardImage(product.id);
+                    cardImageInputRef.current?.click();
+                  }}
+                  className="relative shrink-0 group/img cursor-pointer mt-0.5"
+                  title={
+                    product.imageUrl
+                      ? 'Toque para trocar a imagem da galeria'
+                      : 'Toque para adicionar foto da galeria'
+                  }
+                >
+                  {product.imageUrl ? (
+                    <div className="w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-xl sm:rounded-2xl overflow-hidden bg-slate-950 border border-slate-700/80 group-hover:border-amber-400 transition-all shadow-md flex items-center justify-center shrink-0">
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity rounded-xl sm:rounded-2xl">
+                        <ImagePlus className="w-5 h-5 text-amber-300" />
                       </div>
-                    ) : (
-                      <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-slate-950 border border-dashed border-slate-700 group-hover:border-amber-400 flex flex-col items-center justify-center text-slate-500 group-hover:text-amber-400 transition-colors shadow-inner shrink-0">
-                        <ImagePlus className="w-4 h-4 sm:w-5 sm:h-5" />
-                        <span className="hidden sm:inline text-[9px] font-bold mt-0.5 tracking-tight text-slate-400">
-                          + Foto
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Nome do Produto, Status e Preço (Tablet/Horizontal) */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <h4
-                        className={`text-base sm:text-xl font-bold transition-colors break-words sm:truncate ${
-                          product.isAvailable !== false
-                            ? 'text-white group-hover:text-amber-300'
-                            : 'text-slate-300 line-through decoration-rose-500/60'
-                        }`}
-                      >
-                        {product.name}
-                      </h4>
-
-                      {/* BADGE DE DISPONIBILIDADE: DISPONÍVEL OU ESGOTADO */}
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold tracking-wide shrink-0 ${
-                          product.isAvailable !== false
-                            ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
-                            : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            product.isAvailable !== false
-                              ? 'bg-emerald-400'
-                              : 'bg-rose-400'
-                          }`}
-                        />
-                        {product.isAvailable !== false ? 'Disponível' : 'Esgotado'}
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-xl sm:rounded-2xl bg-slate-950 border border-dashed border-slate-700 group-hover:border-amber-400 flex flex-col items-center justify-center text-slate-500 group-hover:text-amber-400 transition-colors shadow-inner shrink-0">
+                      <ImagePlus className="w-5 h-5" />
+                      <span className="text-[9px] font-bold mt-0.5 tracking-tight text-slate-400">
+                        + Foto
                       </span>
                     </div>
-
-                    {/* PREÇO DE BALANÇA NO TABLET / HORIZONTAL (ESCONDIDO NO MOBILE VERTICAL POIS VAI PARA A LINHA INFERIOR) */}
-                    <div className="hidden sm:flex items-center gap-2.5 flex-wrap">
-                      {product.price ? (
-                        <div className="inline-flex items-baseline gap-1 font-mono font-extrabold text-emerald-400 text-sm sm:text-base bg-slate-950/80 px-2 py-0.5 rounded-md border border-slate-800 shadow-inner">
-                          <span className="text-[10px] text-emerald-500 font-bold">R$</span>
-                          <span>{product.price}</span>
-                          <span className="text-[10px] text-slate-400 font-normal">
-                            /{product.unit || 'kg'}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-500 font-medium">
-                          Preço sob consulta
-                        </span>
-                      )}
-
-                      <span className="text-[11px] text-slate-500">
-                        • Toque no card para ver código ampliado
-                      </span>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
-                {/* LINHA INFERIOR NO MOBILE VERTICAL / LADO DIREITO NO TABLET E HORIZONTAL */}
-                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2.5 sm:pt-0 border-t border-slate-800/80 sm:border-0">
-                  {/* PREÇO COMPLETO NO MOBILE VERTICAL (ESCONDIDO NO TABLET) */}
-                  <div className="sm:hidden flex items-center min-w-0">
+                {/* COLUNA PRINCIPAL: HIERARQUIA VISUAL DA IMAGEM DE REFERÊNCIA */}
+                <div className="flex-1 min-w-0 flex flex-col items-start gap-1">
+                  {/* 1. CÓDIGO DO PRODUTO: MAIOR DESTAQUE VISUAL */}
+                  <div className="font-mono text-2xl sm:text-3xl font-black text-amber-400 tracking-wider leading-none">
+                    {product.code}
+                  </div>
+
+                  {/* 3. NOME COMPLETO: LEGÍVEL E COM QUEBRA AUTOMÁTICA DE LINHA */}
+                  <h4
+                    className={`text-base sm:text-lg font-bold leading-snug transition-colors break-words w-full ${
+                      product.isAvailable !== false
+                        ? 'text-white group-hover:text-amber-300'
+                        : 'text-slate-300 line-through decoration-rose-500/60'
+                    }`}
+                  >
+                    {product.name}
+                  </h4>
+
+                  {/* 4. STATUS DISPONÍVEL OU ESGOTADO: SEMPRE VISÍVEL */}
+                  <div className="my-0.5">
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold tracking-wide shrink-0 ${
+                        product.isAvailable !== false
+                          ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
+                          : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          product.isAvailable !== false ? 'bg-emerald-400' : 'bg-rose-400'
+                        }`}
+                      />
+                      {product.isAvailable !== false ? 'Disponível' : 'Esgotado'}
+                    </span>
+                  </div>
+
+                  {/* 5. PREÇO E UNIDADE JUNTOS NA MESMA LINHA: EX: R$ 8,99 / kg */}
+                  <div className="flex items-center">
                     {product.price ? (
-                      <div className="inline-flex items-baseline gap-1 font-mono font-extrabold text-emerald-400 text-sm bg-slate-950/90 px-2.5 py-1 rounded-lg border border-slate-800 shadow-inner">
-                        <span className="text-[10px] text-emerald-500 font-bold">R$</span>
+                      <div className="inline-flex items-baseline gap-1 font-mono font-extrabold text-emerald-400 text-sm sm:text-base bg-slate-950/80 px-2 py-0.5 rounded-md border border-slate-800 shadow-inner">
+                        <span className="text-xs text-emerald-500 font-bold">R$</span>
                         <span className="tracking-tight">{product.price}</span>
-                        <span className="text-[10px] text-slate-400 font-normal">
-                          /{product.unit || 'kg'}
+                        <span className="text-xs text-slate-400 font-normal">
+                          / {product.unit || 'kg'}
                         </span>
                       </div>
                     ) : (
@@ -606,61 +583,48 @@ export default function App() {
                       </span>
                     )}
                   </div>
+                </div>
 
-                  {/* CÓDIGO E AÇÕES (COPIAR, EDITAR, EXCLUIR) */}
-                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                    {/* CÓDIGO EM NÚMEROS MUITO GRANDES E FÁCEIS DE LER */}
-                    <div className="bg-slate-950 border-2 border-amber-400/80 rounded-xl px-3.5 py-1.5 sm:px-4 sm:py-2 text-center group-hover:border-amber-300 transition-colors shadow-inner">
-                      <div className="text-[9px] sm:text-[10px] text-slate-500 uppercase font-semibold tracking-wider leading-none mb-0.5">
-                        Código
-                      </div>
-                      <div className="font-mono text-2xl sm:text-3xl font-black text-amber-400 tracking-wider leading-tight">
-                        {product.code}
-                      </div>
-                    </div>
+                {/* LADO DIREITO: BOTÕES DE AÇÕES (COPIAR CÓDIGO, EDITAR, EXCLUIR) */}
+                <div
+                  className="shrink-0 flex flex-col items-center gap-1.5 pt-0.5"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={() => handleCopyCode(product.code, product.name)}
+                    className={`p-2 rounded-xl transition-colors ${
+                      copiedCode === product.code
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800'
+                    }`}
+                    title="Copiar código com 1 toque"
+                  >
+                    {copiedCode === product.code ? (
+                      <Check className="w-5 h-5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-5 h-5" />
+                    )}
+                  </button>
 
-                    {/* Ações Rápidas (Copiar, Editar, Excluir) */}
-                    <div
-                      className="flex flex-col gap-1 shrink-0"
-                      onClick={(e) => e.stopPropagation()}
+                  <div className="flex sm:flex-col gap-1">
+                    <button
+                      onClick={() => {
+                        setProductToEdit(product);
+                        setIsFormOpen(true);
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors"
+                      title="Editar produto"
                     >
-                      <button
-                        onClick={() => handleCopyCode(product.code, product.name)}
-                        className={`p-2 rounded-lg transition-colors ${
-                          copiedCode === product.code
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                        }`}
-                        title="Copiar código"
-                      >
-                        {copiedCode === product.code ? (
-                          <Check className="w-4 h-4" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </button>
+                      <Edit2 className="w-4 h-4" />
+                    </button>
 
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => {
-                            setProductToEdit(product);
-                            setIsFormOpen(true);
-                          }}
-                          className="p-1.5 text-slate-500 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors"
-                          title="Editar produto"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          onClick={() => setProductToDelete(product)}
-                          className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
-                          title="Excluir produto"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
+                    <button
+                      onClick={() => setProductToDelete(product)}
+                      className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+                      title="Excluir produto"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </div>
