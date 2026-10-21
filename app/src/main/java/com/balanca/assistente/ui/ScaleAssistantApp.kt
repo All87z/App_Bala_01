@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -259,7 +260,7 @@ fun ScaleAssistantApp(
                             .padding(vertical = 8.dp),
                         shape = RoundedCornerShape(12.dp),
                         color = SurfaceVariantDark,
-                        border = border(1.dp, PrimaryYellow.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        border = BorderStroke(1.dp, PrimaryYellow.copy(alpha = 0.5f))
                     ) {
                         Row(
                             modifier = Modifier
@@ -432,7 +433,7 @@ fun RecentProductChip(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
         color = SurfaceDark,
-        border = border(1.dp, SurfaceVariantDark, RoundedCornerShape(12.dp))
+        border = BorderStroke(1.dp, SurfaceVariantDark)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -478,7 +479,7 @@ fun ProductCard(
             .clickable { onCardClick() },
         color = SurfaceDark,
         shape = RoundedCornerShape(16.dp),
-        border = border(1.dp, SurfaceVariantDark, RoundedCornerShape(16.dp))
+        border = BorderStroke(1.dp, SurfaceVariantDark)
     ) {
         Row(
             modifier = Modifier
@@ -491,7 +492,7 @@ fun ProductCard(
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = BackgroundDark,
-                border = border(1.dp, SurfaceVariantDark, RoundedCornerShape(12.dp)),
+                border = BorderStroke(1.dp, SurfaceVariantDark),
                 modifier = Modifier
                     .size(50.dp)
             ) {
@@ -528,7 +529,7 @@ fun ProductCard(
                     Surface(
                         shape = RoundedCornerShape(6.dp),
                         color = if (product.isAvailable) AccentGreen.copy(alpha = 0.2f) else DangerRed.copy(alpha = 0.2f),
-                        border = border(1.dp, if (product.isAvailable) AccentGreen.copy(alpha = 0.5f) else DangerRed.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                        border = BorderStroke(1.dp, if (product.isAvailable) AccentGreen.copy(alpha = 0.5f) else DangerRed.copy(alpha = 0.5f))
                     ) {
                         Text(
                             text = if (product.isAvailable) "Disponível" else "Esgotado",
@@ -572,7 +573,7 @@ fun ProductCard(
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = BackgroundDark,
-                    border = border(2.dp, PrimaryYellow.copy(alpha = 0.8f), RoundedCornerShape(12.dp)),
+                    border = BorderStroke(2.dp, PrimaryYellow.copy(alpha = 0.8f)),
                     modifier = Modifier.padding(horizontal = 6.dp)
                 ) {
                     Text(
@@ -645,7 +646,7 @@ fun SpotlightDialog(
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = SurfaceDark,
-            border = border(2.dp, PrimaryYellow, RoundedCornerShape(24.dp)),
+            border = BorderStroke(2.dp, PrimaryYellow),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
@@ -677,7 +678,7 @@ fun SpotlightDialog(
                 Surface(
                     shape = RoundedCornerShape(18.dp),
                     color = BackgroundDark,
-                    border = border(3.dp, PrimaryYellow, RoundedCornerShape(18.dp)),
+                    border = BorderStroke(3.dp, PrimaryYellow),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
