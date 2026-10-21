@@ -77,6 +77,25 @@ fun ScaleAssistantApp(
     val statusNotice by viewModel.statusNotice.collectAsState()
     val isListening by viewModel.isListening.collectAsState()
 
+    var isDataBackupDialogOpen by remember { mutableStateOf(false) }
+
+    // Launcher para salvar arquivo CSV exportado
+    val exportCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        uri?.let {
+            try {
+                context.contentResolver.openOutputStream(it)?.use { stream ->
+                    val csvData = viewModel.getCsvContent()
+                    stream.write(csvData.toByteArray(Charsets.UTF_8))
+                    Toast.makeText(context, "CSV salvo com sucesso!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Erro ao exportar CSV: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     // Launcher para importar arquivo CSV
     val importCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -88,6 +107,36 @@ fun ScaleAssistantApp(
                 }
             } catch (e: Exception) {
                 Toast.makeText(context, "Falha ao abrir CSV: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // Launcher para salvar backup completo ZIP (com fotos)
+    val exportZipLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        uri?.let {
+            try {
+                context.contentResolver.openOutputStream(it)?.use { stream ->
+                    viewModel.exportZip(context, stream)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Erro ao exportar ZIP: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // Launcher para restaurar backup completo ZIP (com fotos)
+    val importZipLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            try {
+                context.contentResolver.openInputStream(it)?.use { stream ->
+                    viewModel.importZip(context, stream)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Falha ao abrir ZIP: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -119,32 +168,13 @@ fun ScaleAssistantApp(
                     }
                 },
                 actions = {
-                    // Exportar CSV
                     IconButton(
-                        onClick = {
-                            val csvData = viewModel.getCsvContent()
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("Backup CSV Balança", csvData))
-                            Toast.makeText(context, "CSV copiado para a área de transferência!", Toast.LENGTH_LONG).show()
-                        }
+                        onClick = { isDataBackupDialogOpen = true }
                     ) {
                         Icon(
                             imageVector = Icons.Default.FileDownload,
-                            contentDescription = "Exportar CSV",
-                            tint = TextLight
-                        )
-                    }
-
-                    // Importar CSV
-                    IconButton(
-                        onClick = {
-                            importCsvLauncher.launch("text/*")
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FileUpload,
-                            contentDescription = "Importar CSV",
-                            tint = TextLight
+                            contentDescription = "Importar / Exportar Dados",
+                            tint = PrimaryYellow
                         )
                     }
                 },
@@ -154,28 +184,26 @@ fun ScaleAssistantApp(
             )
         },
         floatingActionButton = {
-            LargeFloatingActionButton(
+            ExtendedFloatingActionButton(
                 onClick = { viewModel.openAddDialog() },
                 containerColor = PrimaryYellow,
                 contentColor = BackgroundDark,
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.height(48.dp),
+                icon = {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Adicionar Produto",
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(22.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                },
+                text = {
                     Text(
                         text = "Novo Produto",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     )
                 }
-            }
+            )
         },
         containerColor = BackgroundDark
     ) { innerPadding ->
