@@ -438,17 +438,18 @@ export default function App() {
               <div
                 key={product.id}
                 onClick={() => handleSelectProduct(product)}
-                className="group cursor-pointer bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-400/60 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 transition-all duration-150 hover:shadow-xl hover:shadow-amber-500/5 active:scale-[0.99]"
+                className="group cursor-pointer bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-400/60 rounded-2xl p-3.5 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 transition-all duration-150 hover:shadow-xl hover:shadow-amber-500/5 active:scale-[0.99]"
               >
-                {/* Imagem de Referência da Galeria ANTES da palavra */}
-                <div className="flex items-center gap-3.5 sm:gap-4 flex-1 min-w-0">
+                {/* TOPO NO SMARTPHONE VERTICAL / LADO ESQUERDO NO TABLET E HORIZONTAL */}
+                <div className="flex items-start sm:items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                  {/* Imagem de Referência da Galeria ANTES da palavra */}
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
                       setProductForCardImage(product.id);
                       cardImageInputRef.current?.click();
                     }}
-                    className="relative shrink-0 group/img cursor-pointer"
+                    className="relative shrink-0 group/img cursor-pointer mt-0.5 sm:mt-0"
                     title={
                       product.imageUrl
                         ? 'Toque para trocar a imagem da galeria'
@@ -476,11 +477,11 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Nome do Produto, Status e Preço */}
+                  {/* Nome do Produto, Status e Preço (Tablet/Horizontal) */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <h4
-                        className={`text-lg sm:text-xl font-bold transition-colors truncate ${
+                        className={`text-base sm:text-xl font-bold transition-colors break-words sm:truncate ${
                           product.isAvailable !== false
                             ? 'text-white group-hover:text-amber-300'
                             : 'text-slate-300 line-through decoration-rose-500/60'
@@ -491,7 +492,7 @@ export default function App() {
 
                       {/* BADGE DE DISPONIBILIDADE: DISPONÍVEL OU ESGOTADO */}
                       <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold tracking-wide ${
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold tracking-wide shrink-0 ${
                           product.isAvailable !== false
                             ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
                             : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
@@ -508,8 +509,8 @@ export default function App() {
                       </span>
                     </div>
 
-                    {/* PREÇO DE BALANÇA */}
-                    <div className="flex items-center gap-2.5 flex-wrap">
+                    {/* PREÇO DE BALANÇA NO TABLET / HORIZONTAL (ESCONDIDO NO MOBILE VERTICAL POIS VAI PARA A LINHA INFERIOR) */}
+                    <div className="hidden sm:flex items-center gap-2.5 flex-wrap">
                       {product.price ? (
                         <div className="inline-flex items-baseline gap-1 font-mono font-extrabold text-emerald-400 text-sm sm:text-base bg-slate-950/80 px-2 py-0.5 rounded-md border border-slate-800 shadow-inner">
                           <span className="text-[10px] text-emerald-500 font-bold">R$</span>
@@ -524,64 +525,85 @@ export default function App() {
                         </span>
                       )}
 
-                      <span className="text-[11px] text-slate-500 hidden sm:inline">
+                      <span className="text-[11px] text-slate-500">
                         • Toque no card para ver código ampliado
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* CÓDIGO EM NÚMEROS MUITO GRANDES E FÁCEIS DE LER */}
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="bg-slate-950 border-2 border-amber-400/80 rounded-xl px-4 py-2 text-center group-hover:border-amber-300 transition-colors shadow-inner">
-                    <div className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider">
-                      Código
-                    </div>
-                    <div className="font-mono text-2xl sm:text-3xl font-black text-amber-400 tracking-wider">
-                      {product.code}
-                    </div>
+                {/* LINHA INFERIOR NO MOBILE VERTICAL / LADO DIREITO NO TABLET E HORIZONTAL */}
+                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2.5 sm:pt-0 border-t border-slate-800/80 sm:border-0">
+                  {/* PREÇO COMPLETO NO MOBILE VERTICAL (ESCONDIDO NO TABLET) */}
+                  <div className="sm:hidden flex items-center min-w-0">
+                    {product.price ? (
+                      <div className="inline-flex items-baseline gap-1 font-mono font-extrabold text-emerald-400 text-sm bg-slate-950/90 px-2.5 py-1 rounded-lg border border-slate-800 shadow-inner">
+                        <span className="text-[10px] text-emerald-500 font-bold">R$</span>
+                        <span className="tracking-tight">{product.price}</span>
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          /{product.unit || 'kg'}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-500 font-medium italic">
+                        Preço a definir
+                      </span>
+                    )}
                   </div>
 
-                  {/* Ações Rápidas (Copiar, Editar, Excluir) */}
-                  <div
-                    className="flex flex-col gap-1"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      onClick={() => handleCopyCode(product.code, product.name)}
-                      className={`p-2 rounded-lg transition-colors ${
-                        copiedCode === product.code
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                      }`}
-                      title="Copiar código"
+                  {/* CÓDIGO E AÇÕES (COPIAR, EDITAR, EXCLUIR) */}
+                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                    {/* CÓDIGO EM NÚMEROS MUITO GRANDES E FÁCEIS DE LER */}
+                    <div className="bg-slate-950 border-2 border-amber-400/80 rounded-xl px-3.5 py-1.5 sm:px-4 sm:py-2 text-center group-hover:border-amber-300 transition-colors shadow-inner">
+                      <div className="text-[9px] sm:text-[10px] text-slate-500 uppercase font-semibold tracking-wider leading-none mb-0.5">
+                        Código
+                      </div>
+                      <div className="font-mono text-2xl sm:text-3xl font-black text-amber-400 tracking-wider leading-tight">
+                        {product.code}
+                      </div>
+                    </div>
+
+                    {/* Ações Rápidas (Copiar, Editar, Excluir) */}
+                    <div
+                      className="flex flex-col gap-1 shrink-0"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      {copiedCode === product.code ? (
-                        <Check className="w-4 h-4" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </button>
-
-                    <div className="flex gap-1">
                       <button
-                        onClick={() => {
-                          setProductToEdit(product);
-                          setIsFormOpen(true);
-                        }}
-                        className="p-1.5 text-slate-500 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors"
-                        title="Editar produto"
+                        onClick={() => handleCopyCode(product.code, product.name)}
+                        className={`p-2 rounded-lg transition-colors ${
+                          copiedCode === product.code
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                        title="Copiar código"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
+                        {copiedCode === product.code ? (
+                          <Check className="w-4 h-4" />
+                        ) : (
+                          <Copy className="w-4 h-4" />
+                        )}
                       </button>
 
-                      <button
-                        onClick={() => setProductToDelete(product)}
-                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
-                        title="Excluir produto"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => {
+                            setProductToEdit(product);
+                            setIsFormOpen(true);
+                          }}
+                          className="p-1.5 text-slate-500 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors"
+                          title="Editar produto"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          onClick={() => setProductToDelete(product)}
+                          className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+                          title="Excluir produto"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

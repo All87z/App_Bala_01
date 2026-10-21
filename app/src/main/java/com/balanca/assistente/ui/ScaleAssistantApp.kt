@@ -481,150 +481,386 @@ fun ProductCard(
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, SurfaceVariantDark)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Imagem de Referência Visual ANTES da palavra / nome
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = BackgroundDark,
-                border = BorderStroke(1.dp, SurfaceVariantDark),
-                modifier = Modifier
-                    .size(50.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.Image,
-                        contentDescription = "Foto do produto",
-                        tint = PrimaryYellow,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val isCompact = maxWidth < 540.dp
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Nome do Produto, Status e Preço
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = product.name,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextLight
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    // Badge de Disponibilidade
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = if (product.isAvailable) AccentGreen.copy(alpha = 0.2f) else DangerRed.copy(alpha = 0.2f),
-                        border = BorderStroke(1.dp, if (product.isAvailable) AccentGreen.copy(alpha = 0.5f) else DangerRed.copy(alpha = 0.5f))
-                    ) {
-                        Text(
-                            text = if (product.isAvailable) "Disponível" else "Esgotado",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (product.isAvailable) AccentGreen else DangerRed
-                            ),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-
-                // Preço
-                if (!product.price.isNullOrEmpty()) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "R$ ${product.price}/${product.unit}",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontFamily = FontFamily.Monospace,
-                            color = AccentGreen
-                        )
-                    )
-                } else {
-                    Text(
-                        text = "Toque para tela cheia",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = TextMuted.copy(alpha = 0.6f)
-                        )
-                    )
-                }
-            }
-
-            // Código em NÚMEROS MUITO GRANDES (Exibição destacada)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = BackgroundDark,
-                    border = BorderStroke(2.dp, PrimaryYellow.copy(alpha = 0.8f)),
-                    modifier = Modifier.padding(horizontal = 6.dp)
+            if (isCompact) {
+                // SMARTPHONE NA ORIENTAÇÃO VERTICAL (PORTRAIT: 320dp - 430dp)
+                // Layout em 2 linhas independentes para evitar qualquer sobreposição ou corte de texto
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
                 ) {
-                    Text(
-                        text = product.code,
-                        style = MaterialTheme.typography.headlineLarge.copy(
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Black,
-                            fontFamily = FontFamily.Monospace,
-                            color = PrimaryYellow,
-                            letterSpacing = 1.sp
-                        ),
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                    )
-                }
-
-                // Ações Rápidas (Copiar, Editar, Excluir)
-                Column {
-                    IconButton(
-                        onClick = onCopyClick,
-                        modifier = Modifier.size(34.dp)
+                    // ÁREA SUPERIOR: Foto + Nome Completo sem cortes + Badge
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copiar Código",
-                            tint = CodeHighlight,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        // Imagem de Referência Visual ANTES da palavra / nome
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = BackgroundDark,
+                            border = BorderStroke(1.dp, SurfaceVariantDark),
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Image,
+                                    contentDescription = "Foto do produto",
+                                    tint = PrimaryYellow,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        // Coluna do Nome e Status: ocupa toda a largura restante sem restrições
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                        ) {
+                            Text(
+                                text = product.name,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextLight,
+                                    lineHeight = 21.sp
+                                ),
+                                maxLines = 4,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Badge de Disponibilidade
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (product.isAvailable) AccentGreen.copy(alpha = 0.2f) else DangerRed.copy(alpha = 0.2f),
+                                border = BorderStroke(1.dp, if (product.isAvailable) AccentGreen.copy(alpha = 0.5f) else DangerRed.copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(if (product.isAvailable) AccentGreen else DangerRed)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (product.isAvailable) "Disponível" else "Esgotado",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (product.isAvailable) AccentGreen else DangerRed
+                                        )
+                                    )
+                                }
+                            }
+                        }
                     }
 
-                    Row {
-                        IconButton(
-                            onClick = onEditClick,
-                            modifier = Modifier.size(30.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Editar",
-                                tint = TextMuted,
-                                modifier = Modifier.size(17.dp)
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Divisor sutil separando os blocos
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(SurfaceVariantDark.copy(alpha = 0.6f))
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // ÁREA INFERIOR: Preço Completo à esquerda + Código Destacado e Ações à direita
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        // Preço Completo
+                        if (!product.price.isNullOrEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = BackgroundDark.copy(alpha = 0.8f),
+                                border = BorderStroke(1.dp, SurfaceVariantDark)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.Bottom,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "R$ ",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = AccentGreen
+                                        )
+                                    )
+                                    Text(
+                                        text = product.price,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = AccentGreen
+                                        )
+                                    )
+                                    Text(
+                                        text = "/${product.unit}",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 10.sp,
+                                            color = TextMuted
+                                        )
+                                    )
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "Preço a definir",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 11.sp,
+                                    color = TextMuted.copy(alpha = 0.7f)
+                                )
                             )
                         }
-                        IconButton(
-                            onClick = onDeleteClick,
-                            modifier = Modifier.size(30.dp)
+
+                        // Código Destacado + Botões (Área totalmente independente)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End
                         ) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = BackgroundDark,
+                                border = BorderStroke(2.dp, PrimaryYellow.copy(alpha = 0.9f))
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = "CÓDIGO",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = TextMuted,
+                                            letterSpacing = 0.5.sp
+                                        )
+                                    )
+                                    Text(
+                                        text = product.code,
+                                        style = MaterialTheme.typography.headlineMedium.copy(
+                                            fontSize = 24.sp,
+                                            fontWeight = FontWeight.Black,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = PrimaryYellow,
+                                            letterSpacing = 1.sp
+                                        )
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            // Botões de Copiar, Editar e Excluir
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                IconButton(
+                                    onClick = onCopyClick,
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = "Copiar Código",
+                                        tint = CodeHighlight,
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = onEditClick,
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Editar",
+                                        tint = TextMuted,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = onDeleteClick,
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Excluir",
+                                        tint = DangerRed.copy(alpha = 0.85f),
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // TABLET E SMARTPHONE HORIZONTAL (>= 540dp) - Layout original lado a lado preservado
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Imagem de Referência Visual ANTES da palavra / nome
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = BackgroundDark,
+                        border = BorderStroke(1.dp, SurfaceVariantDark),
+                        modifier = Modifier.size(50.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Excluir",
-                                tint = DangerRed.copy(alpha = 0.8f),
-                                modifier = Modifier.size(17.dp)
+                                imageVector = Icons.Default.Image,
+                                contentDescription = "Foto do produto",
+                                tint = PrimaryYellow,
+                                modifier = Modifier.size(24.dp)
                             )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    // Nome do Produto, Status e Preço
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = product.name,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextLight
+                                ),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            // Badge de Disponibilidade
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (product.isAvailable) AccentGreen.copy(alpha = 0.2f) else DangerRed.copy(alpha = 0.2f),
+                                border = BorderStroke(1.dp, if (product.isAvailable) AccentGreen.copy(alpha = 0.5f) else DangerRed.copy(alpha = 0.5f))
+                            ) {
+                                Text(
+                                    text = if (product.isAvailable) "Disponível" else "Esgotado",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (product.isAvailable) AccentGreen else DangerRed
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        // Preço
+                        if (!product.price.isNullOrEmpty()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "R$ ${product.price}/${product.unit}",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = AccentGreen
+                                )
+                            )
+                        } else {
+                            Text(
+                                text = "Toque para tela cheia",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = TextMuted.copy(alpha = 0.6f)
+                                )
+                            )
+                        }
+                    }
+
+                    // Código em NÚMEROS MUITO GRANDES (Exibição destacada)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = BackgroundDark,
+                            border = BorderStroke(2.dp, PrimaryYellow.copy(alpha = 0.8f)),
+                            modifier = Modifier.padding(horizontal = 6.dp)
+                        ) {
+                            Text(
+                                text = product.code,
+                                style = MaterialTheme.typography.headlineLarge.copy(
+                                    fontSize = 32.sp,
+                                    fontWeight = FontWeight.Black,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = PrimaryYellow,
+                                    letterSpacing = 1.sp
+                                ),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                            )
+                        }
+
+                        // Ações Rápidas (Copiar, Editar, Excluir)
+                        Column {
+                            IconButton(
+                                onClick = onCopyClick,
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copiar Código",
+                                    tint = CodeHighlight,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            Row {
+                                IconButton(
+                                    onClick = onEditClick,
+                                    modifier = Modifier.size(30.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Editar",
+                                        tint = TextMuted,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = onDeleteClick,
+                                    modifier = Modifier.size(30.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Excluir",
+                                        tint = DangerRed.copy(alpha = 0.8f),
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
