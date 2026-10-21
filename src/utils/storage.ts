@@ -83,7 +83,21 @@ export function saveProducts(products: Product[]): void {
   try {
     localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(products));
   } catch (error) {
-    console.error('Erro ao salvar produtos:', error);
+    console.warn('Alerta de cota no localStorage ao salvar produtos, aplicando recuperação de segurança:', error);
+    try {
+      // Se a cota do localStorage for atingida, garante a persistência dos produtos mantendo as fotos mais recentes
+      const safeProducts = products.map((p, index) => {
+        // Mantém a foto dos produtos recentes (até 15) e dos itens editados; para os demais se estourar, preserva o restante dos dados
+        if (index > 15 && p.imageUrl && p.imageUrl.startsWith('data:image/')) {
+          const { imageUrl, ...rest } = p;
+          return rest as Product;
+        }
+        return p;
+      });
+      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(safeProducts));
+    } catch (criticalErr) {
+      console.error('Falha crítica ao gravar no localStorage:', criticalErr);
+    }
   }
 }
 

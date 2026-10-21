@@ -1123,6 +1123,45 @@ fun ProductFormDialog(
                     )
                 )
 
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Unidade de Venda da Balança (UN, PCT, KG, 100G, G, BDJ)
+                Text(
+                    text = "Unidade de Venda da Balança",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        color = TextLight,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                val availableUnits = listOf("UN", "PCT", "KG", "100G", "G", "BDJ")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    availableUnits.forEach { u ->
+                        val isSelected = unit.equals(u, ignoreCase = true)
+                        Surface(
+                            onClick = { unit = u.lowercase() },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) PrimaryYellow else SurfaceVariantDark,
+                            border = BorderStroke(1.dp, if (isSelected) PrimaryYellow else SurfaceVariantDark),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = u,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) BackgroundDark else TextLight,
+                                    textAlign = TextAlign.Center
+                                ),
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
+                }
+
                 // Mensagem de Erro / Duplicidade
                 errorMessage?.let { error ->
                     Spacer(modifier = Modifier.height(10.dp))

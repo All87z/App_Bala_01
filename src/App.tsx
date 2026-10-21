@@ -148,6 +148,8 @@ export default function App() {
     }
     setProducts(updated);
     saveProducts(updated);
+    // Limpa a busca para que o produto recém-cadastrado apareça imediatamente na lista
+    setSearchQuery('');
   };
 
   // Confirmar exclusão de produto

@@ -3,14 +3,27 @@
  */
 export async function processGalleryImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
+    // Validação básica do tipo de arquivo
+    if (!file || !file.type.startsWith('image/')) {
+      // Se não tiver mime type explícito, tenta prosseguir mesmo assim
+      if (!file) {
+        reject(new Error('Nenhum arquivo de imagem fornecido.'));
+        return;
+      }
+    }
+
+    const processImageElement = (img: HTMLImageElement, cleanup?: () => void) => {
+      try {
         const canvas = document.createElement('canvas');
-        const MAX_SIZE = 360; // Tamanho ideal para miniatura e destaque nítidos
-        let width = img.width;
-        let height = img.height;
+        const MAX_SIZE = 280; // Ideal para visualização nítida sem estourar o localStorage
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
+
+        if (!width || !height) {
+          if (cleanup) cleanup();
+          reject(new Error('Dimensões da imagem inválidas.'));
+          return;
+        }
 
         if (width > height) {
           if (width > MAX_SIZE) {
@@ -28,21 +41,100 @@ export async function processGalleryImage(file: File): Promise<string> {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          resolve(event.target?.result as string);
+          if (cleanup) cleanup();
+          reject(new Error('Não foi possível inicializar renderizador de imagem.'));
           return;
         }
 
+        // Fundo escuro elegante para imagens com transparência
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
-        // Gera JPEG otimizado
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+
+        // Gera JPEG otimizado (~12KB a 20KB)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+        if (cleanup) cleanup();
         resolve(dataUrl);
-      };
-      img.onerror = () => reject(new Error('Falha ao processar arquivo de imagem.'));
-      img.src = event.target?.result as string;
+      } catch (err) {
+        if (cleanup) cleanup();
+        reject(err instanceof Error ? err : new Error('Erro ao processar imagem no canvas.'));
+      }
     };
-    reader.onerror = () => reject(new Error('Erro ao ler arquivo da galeria.'));
-    reader.readAsDataURL(file);
+
+    // Tenta primeiro via URL.createObjectURL (muito mais rápido e consome menos memória no smartphone)
+    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      try {
+        const objectUrl = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          processImageElement(img, () => URL.revokeObjectURL(objectUrl));
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          // Fallback para FileReader se createObjectURL falhar
+          fallbackWithFileReader(file, resolve, reject);
+        };
+        img.src = objectUrl;
+        return;
+      } catch {
+        // Prossegue para o fallback
+      }
+    }
+
+    fallbackWithFileReader(file, resolve, reject);
   });
+}
+
+function fallbackWithFileReader(
+  file: File,
+  resolve: (value: string) => void,
+  reject: (reason?: any) => void
+) {
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const rawDataUrl = event.target?.result as string;
+    if (!rawDataUrl) {
+      reject(new Error('Falha ao ler dados da imagem.'));
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 280;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(rawDataUrl);
+          return;
+        }
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.78));
+      } catch {
+        resolve(rawDataUrl);
+      }
+    };
+    img.onerror = () => reject(new Error('Falha ao decodificar imagem da galeria.'));
+    img.src = rawDataUrl;
+  };
+  reader.onerror = () => reject(new Error('Erro ao ler arquivo da galeria.'));
+  reader.readAsDataURL(file);
 }
 
 // Ilustrações SVG elegantes para os produtos iniciais

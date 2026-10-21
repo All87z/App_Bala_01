@@ -205,6 +205,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
             _isAddEditDialogOpen.value = false
             _productToEdit.value = null
             _formErrorMessage.value = null
+            _searchQuery.value = ""
         }
 
         return true
