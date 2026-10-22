@@ -413,6 +413,36 @@ export default function App() {
           </div>
         </div>
 
+        {/* BARRA DE AÇÕES CLARAS: EXPORTAR CSV E IMPORTAR CSV (sempre visível em smartphones e desktop) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-5">
+          <button
+            onClick={handleExportCsv}
+            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-800/90 text-slate-200 hover:text-white text-xs sm:text-sm font-semibold transition-all shadow-sm active:scale-95"
+            title="Exportar todos os produtos para CSV (compatível com Excel e UTF-8)"
+          >
+            <Download className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Exportar CSV</span>
+          </button>
+
+          <button
+            onClick={() => setIsDataBackupModalOpen(true)}
+            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-emerald-400/50 hover:bg-slate-800/90 text-slate-200 hover:text-white text-xs sm:text-sm font-semibold transition-all shadow-sm active:scale-95"
+            title="Importar catálogo de produtos de arquivo CSV com prévia e validação"
+          >
+            <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>Importar CSV</span>
+          </button>
+
+          <button
+            onClick={() => setIsDataBackupModalOpen(true)}
+            className="col-span-2 sm:col-span-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-sky-400/50 hover:bg-slate-800/90 text-slate-200 hover:text-white text-xs sm:text-sm font-semibold transition-all shadow-sm active:scale-95"
+            title="Backup completo com fotos em ZIP e restauração segura"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-sky-400 shrink-0" />
+            <span>Backup com Fotos</span>
+          </button>
+        </div>
+
         {/* Notificação Toast Flutuante */}
         {toastMessage && (
           <div className="mb-4 p-3.5 bg-slate-900 border border-amber-500/50 rounded-2xl text-amber-200 text-sm flex items-center justify-between shadow-lg animate-in slide-in-from-top-2 duration-200">

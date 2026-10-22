@@ -168,13 +168,29 @@ fun ScaleAssistantApp(
                     }
                 },
                 actions = {
+                    // Exportar CSV direto
                     IconButton(
-                        onClick = { isDataBackupDialogOpen = true }
+                        onClick = {
+                            exportCsvLauncher.launch("produtos_balanca_${System.currentTimeMillis()}.csv")
+                        }
                     ) {
                         Icon(
                             imageVector = Icons.Default.FileDownload,
-                            contentDescription = "Importar / Exportar Dados",
+                            contentDescription = "Exportar CSV",
                             tint = PrimaryYellow
+                        )
+                    }
+
+                    // Importar CSV direto
+                    IconButton(
+                        onClick = {
+                            importCsvLauncher.launch("*/*")
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileUpload,
+                            contentDescription = "Importar CSV",
+                            tint = AccentGreen
                         )
                     }
                 },
@@ -282,6 +298,99 @@ fun ScaleAssistantApp(
                     unfocusedTextColor = TextLight
                 )
             )
+
+            // Ações Imediatas: Exportar CSV e Importar CSV (sempre visíveis no celular e tablet)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    onClick = {
+                        exportCsvLauncher.launch("produtos_balanca_${System.currentTimeMillis()}.csv")
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    color = SurfaceDark,
+                    border = BorderStroke(1.dp, SurfaceVariantDark)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileDownload,
+                            contentDescription = "Exportar CSV",
+                            tint = PrimaryYellow,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "Exportar CSV",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = TextLight,
+                                fontSize = 12.sp
+                            )
+                        )
+                    }
+                }
+
+                Surface(
+                    onClick = {
+                        importCsvLauncher.launch("*/*")
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    color = SurfaceDark,
+                    border = BorderStroke(1.dp, SurfaceVariantDark)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileUpload,
+                            contentDescription = "Importar CSV",
+                            tint = AccentGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "Importar CSV",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = TextLight,
+                                fontSize = 12.sp
+                            )
+                        )
+                    }
+                }
+
+                Surface(
+                    onClick = { isDataBackupDialogOpen = true },
+                    shape = RoundedCornerShape(10.dp),
+                    color = SurfaceDark,
+                    border = BorderStroke(1.dp, SurfaceVariantDark)
+                ) {
+                    Box(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "ZIP...",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = CodeHighlight,
+                                fontSize = 12.sp
+                            )
+                        )
+                    }
+                }
+            }
 
             // Aviso de status ou voz offline
             AnimatedVisibility(
@@ -422,6 +531,31 @@ fun ScaleAssistantApp(
         )
     }
 
+    // Modal de Backup / Importação / Exportação Completo
+    if (isDataBackupDialogOpen) {
+        DataBackupDialog(
+            onDismiss = { isDataBackupDialogOpen = false },
+            onExportCsv = {
+                exportCsvLauncher.launch("produtos_balanca_${System.currentTimeMillis()}.csv")
+            },
+            onCopyCsv = {
+                val csvData = viewModel.getCsvContent()
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Backup CSV Balança", csvData))
+                Toast.makeText(context, "CSV copiado para a área de transferência!", Toast.LENGTH_SHORT).show()
+            },
+            onImportCsv = {
+                importCsvLauncher.launch("*/*")
+            },
+            onExportZip = {
+                exportZipLauncher.launch("backup_balanca_${System.currentTimeMillis()}.zip")
+            },
+            onImportZip = {
+                importZipLauncher.launch("*/*")
+            }
+        )
+    }
+
     // Diálogo de Confirmação de Exclusão
     productToDelete?.let { product ->
         AlertDialog(
@@ -454,6 +588,64 @@ fun ScaleAssistantApp(
             containerColor = SurfaceDark,
             shape = RoundedCornerShape(16.dp)
         )
+    }
+}
+
+/**
+ * Renderizador de imagem persistente do produto para APK e dispositivos móveis
+ */
+@Composable
+fun ProductThumbnail(
+    imageUri: String?,
+    size: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val bitmap = remember(imageUri) {
+        if (!imageUri.isNullOrEmpty()) {
+            try {
+                if (imageUri.startsWith("/")) {
+                    val file = File(imageUri)
+                    if (file.exists() && file.length() > 0) {
+                        BitmapFactory.decodeFile(file.absolutePath)
+                    } else null
+                } else if (imageUri.startsWith("content://") || imageUri.startsWith("file://")) {
+                    val uri = android.net.Uri.parse(imageUri)
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        BitmapFactory.decodeStream(stream)
+                    }
+                } else null
+            } catch (e: Exception) {
+                null
+            }
+        } else null
+    }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = BackgroundDark,
+        border = BorderStroke(1.dp, SurfaceVariantDark),
+        modifier = modifier.size(size)
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Foto do produto",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp))
+            )
+        } else {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Icon(
+                    imageVector = Icons.Default.Image,
+                    contentDescription = "Sem foto",
+                    tint = PrimaryYellow,
+                    modifier = Modifier.size((size.value * 0.45f).dp)
+                )
+            }
+        }
     }
 }
 
@@ -529,22 +721,11 @@ fun ProductCard(
                         .padding(12.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    // 2. FOTO QUADRADA PROPORCIONAL: 64dp (faixa entre 56dp e 72dp)
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = BackgroundDark,
-                        border = BorderStroke(1.dp, SurfaceVariantDark),
-                        modifier = Modifier.size(64.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Image,
-                                contentDescription = "Foto do produto",
-                                tint = PrimaryYellow,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    }
+                    // 2. FOTO QUADRADA PROPORCIONAL: 64dp (faixa entre 56dp e 72dp) com imagem persistente
+                    ProductThumbnail(
+                        imageUri = product.imageUri,
+                        size = 64.dp
+                    )
 
                     Spacer(modifier = Modifier.width(12.dp))
 
@@ -712,22 +893,11 @@ fun ProductCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Imagem de Referência Visual ANTES da palavra / nome
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = BackgroundDark,
-                        border = BorderStroke(1.dp, SurfaceVariantDark),
-                        modifier = Modifier.size(50.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Image,
-                                contentDescription = "Foto do produto",
-                                tint = PrimaryYellow,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
+                    // Imagem de Referência Visual ANTES da palavra / nome com imagem persistente
+                    ProductThumbnail(
+                        imageUri = product.imageUri,
+                        size = 56.dp
+                    )
 
                     Spacer(modifier = Modifier.width(12.dp))
 
@@ -978,6 +1148,7 @@ fun ProductFormDialog(
     onDismiss: () -> Unit,
     onSave: (name: String, code: String, imageUri: String?, price: String?, unit: String, isAvailable: Boolean) -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf(productToEdit?.name ?: "") }
     var code by remember { mutableStateOf(productToEdit?.code ?: "") }
     var price by remember { mutableStateOf(productToEdit?.price ?: "") }
@@ -988,7 +1159,33 @@ fun ProductFormDialog(
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let { imageUri = it.toString() }
+        uri?.let { pickedUri ->
+            try {
+                val imagesDir = File(context.filesDir, "product_images")
+                if (!imagesDir.exists()) imagesDir.mkdirs()
+                val destFile = File(imagesDir, "prod_${System.currentTimeMillis()}.jpg")
+                context.contentResolver.openInputStream(pickedUri)?.use { input ->
+                    val originalBitmap = BitmapFactory.decodeStream(input)
+                    if (originalBitmap != null) {
+                        val maxDim = 400
+                        val width = originalBitmap.width
+                        val height = originalBitmap.height
+                        val scale = (maxDim.toFloat() / maxOf(width, height)).coerceAtMost(1f)
+                        val scaledBitmap = if (scale < 1f) {
+                            Bitmap.createScaledBitmap(originalBitmap, (width * scale).toInt(), (height * scale).toInt(), true)
+                        } else {
+                            originalBitmap
+                        }
+                        FileOutputStream(destFile).use { out ->
+                            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                        }
+                        imageUri = destFile.absolutePath
+                    }
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Erro ao processar imagem: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -1056,9 +1253,39 @@ fun ProductFormDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (imageUri != null) "Trocar Foto da Galeria" else "Adicionar Foto da Galeria",
+                        text = if (!imageUri.isNullOrEmpty()) "Trocar Foto da Galeria" else "Adicionar Foto da Galeria",
                         color = TextLight
                     )
+                }
+
+                // Pré-visualização da Imagem Selecionada com opção de remover
+                if (!imageUri.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(SurfaceVariantDark.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ProductThumbnail(imageUri = imageUri, size = 52.dp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Foto pronta para salvar",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = AccentGreen,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { imageUri = null }) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Remover foto",
+                                tint = DangerRed
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -1185,3 +1412,153 @@ fun ProductFormDialog(
         }
     }
 }
+
+/**
+ * Diálogo de Backup, Importação e Exportação (CSV e ZIP com Fotos)
+ */
+@Composable
+fun DataBackupDialog(
+    onDismiss: () -> Unit,
+    onExportCsv: () -> Unit,
+    onCopyCsv: () -> Unit,
+    onImportCsv: () -> Unit,
+    onExportZip: () -> Unit,
+    onImportZip: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = SurfaceDark,
+            border = BorderStroke(1.dp, SurfaceVariantDark),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Importar / Exportar Dados",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryYellow
+                        )
+                    )
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(imageVector = Icons.Default.Clear, contentDescription = "Fechar", tint = TextMuted)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "BACKUP VIA CSV (PLANILHA)",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = CodeHighlight,
+                        letterSpacing = 1.sp
+                    )
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Exporta e importa códigos, nomes, preços e unidades com UTF-8 e preservação de zeros à esquerda.",
+                    style = MaterialTheme.typography.bodySmall.copy(color = TextMuted)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onExportCsv,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.FileDownload, contentDescription = null, tint = PrimaryYellow, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Salvar CSV", color = TextLight, fontSize = 13.sp)
+                    }
+                    Button(
+                        onClick = onImportCsv,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, tint = AccentGreen, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Importar CSV", color = TextLight, fontSize = 13.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedButton(
+                    onClick = onCopyCsv,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, tint = CodeHighlight, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Copiar CSV para Área de Transferência", color = TextLight, fontSize = 12.sp)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(SurfaceVariantDark)
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "BACKUP COMPLETO EM ZIP (PRODUTOS + FOTOS)",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryYellow,
+                        letterSpacing = 1.sp
+                    )
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Gera um arquivo ZIP com todos os produtos e suas respectivas fotografias associadas.",
+                    style = MaterialTheme.typography.bodySmall.copy(color = TextMuted)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onExportZip,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryYellow),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.FileDownload, contentDescription = null, tint = BackgroundDark, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Exportar ZIP", color = BackgroundDark, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                    Button(
+                        onClick = onImportZip,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, tint = PrimaryYellow, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Restaurar ZIP", color = TextLight, fontSize = 13.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Fechar", color = TextMuted)
+                }
+            }
+        }
+    }
+}
+

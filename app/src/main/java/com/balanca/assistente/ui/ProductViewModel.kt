@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -311,83 +313,130 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    // Reconhecimento de Voz com Verificação de Capacidade Offline
+    // Reconhecimento de Voz robusto com suporte a pt-BR e tratamento detalhado de erros (eliminando erros 12 e 5)
     fun startVoiceRecognition(context: Context) {
-        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            _statusNotice.value = "Reconhecimento de voz não suportado neste aparelho. Utilize a busca por texto."
-            return
-        }
-
-        try {
-            speechRecognizer?.destroy()
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
-
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR")
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "pt-BR")
-                putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, "pt-BR")
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-
-                // Solicita modo offline se suportado pela versão do Android
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-                }
+        Handler(Looper.getMainLooper()).post {
+            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                _statusNotice.value = "Reconhecimento de voz não suportado neste aparelho. Utilize a busca por texto."
+                _isListening.value = false
+                return@post
             }
 
-            speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    _isListening.value = true
+            try {
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
+                speechRecognizer = null
+
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context.applicationContext)
+
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "pt-BR")
+                    putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, "pt-BR")
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 }
 
-                override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {
-                    _isListening.value = false
-                }
-
-                override fun onError(error: Int) {
-                    _isListening.value = false
-                    val errorMsg = when (error) {
-                        SpeechRecognizer.ERROR_NETWORK,
-                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
-                            "Reconhecimento offline indisponível. Para usar a voz sem internet, instale o pacote de voz em Português no menu do Android (Configurações > Voz offline)."
-                        SpeechRecognizer.ERROR_NO_MATCH -> "Nenhuma palavra identificada. Tente falar novamente."
-                        SpeechRecognizer.ERROR_AUDIO -> "Erro no microfone."
-                        else -> "Não foi possível reconhecer a voz (Código: $error). Digite no campo de busca."
+                speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        _isListening.value = true
+                        _statusNotice.value = "Ouvindo... Fale o nome ou código do produto."
                     }
-                    _statusNotice.value = errorMsg
-                }
 
-                override fun onResults(results: Bundle?) {
-                    _isListening.value = false
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!matches.isNullOrEmpty()) {
-                        val heard = matches[0]
-                        _searchQuery.value = heard
-                        _statusNotice.value = "Buscando por: \"$heard\""
+                    override fun onBeginningOfSpeech() {
+                        _isListening.value = true
                     }
-                }
 
-                override fun onPartialResults(partialResults: Bundle?) {}
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
 
-            speechRecognizer?.startListening(intent)
-        } catch (e: Exception) {
-            _isListening.value = false
-            _statusNotice.value = "Não foi possível iniciar o microfone. A busca por texto continua ativa."
+                    override fun onEndOfSpeech() {
+                        _isListening.value = false
+                    }
+
+                    override fun onError(error: Int) {
+                        _isListening.value = false
+                        val errorMsg = when (error) {
+                            SpeechRecognizer.ERROR_AUDIO ->
+                                "Erro ao capturar áudio do microfone. Verifique as permissões."
+                            SpeechRecognizer.ERROR_CLIENT ->
+                                "Serviço de voz ocupado ou reiniciando. Toque no microfone novamente."
+                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
+                                "Permissão de microfone negada. Conceda permissão nas configurações do celular."
+                            SpeechRecognizer.ERROR_NETWORK,
+                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
+                                "Sem conexão com a internet para reconhecer a fala. Digite no campo de busca."
+                            SpeechRecognizer.ERROR_NO_MATCH ->
+                                "Não foi possível compreender o que você falou. Fale mais perto ou digite o código."
+                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY ->
+                                "O reconhecimento já estava ativo. Aguarde um instante e tente novamente."
+                            SpeechRecognizer.ERROR_SERVER,
+                            SpeechRecognizer.ERROR_SERVER_DISCONNECTED ->
+                                "Servidor de voz temporariamente inacessível. Utilize a busca por texto."
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
+                                "Nenhuma fala detectada. Toque no microfone e fale logo em seguida."
+                            12 -> // ERROR_LANGUAGE_NOT_SUPPORTED (API 33+)
+                                "Pacote offline de Português não encontrado no celular. Conecte-se à internet para reconhecimento."
+                            13 -> // ERROR_LANGUAGE_UNAVAILABLE (API 33+)
+                                "Português (pt-BR) indisponível no serviço de voz do aparelho."
+                            else ->
+                                "Não foi possível capturar a voz (código $error). Digite no campo de busca."
+                        }
+                        _statusNotice.value = errorMsg
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        _isListening.value = false
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        if (!matches.isNullOrEmpty()) {
+                            val heard = matches[0]
+                            _searchQuery.value = heard
+                            _statusNotice.value = "Buscando por: \"$heard\""
+                        }
+                    }
+
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        if (!matches.isNullOrEmpty()) {
+                            _searchQuery.value = matches[0]
+                        }
+                    }
+
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+
+                speechRecognizer?.startListening(intent)
+            } catch (e: Exception) {
+                _isListening.value = false
+                _statusNotice.value = "Falha ao iniciar microfone: ${e.localizedMessage ?: "Tente novamente"}"
+            }
         }
     }
 
     fun stopVoiceRecognition() {
-        speechRecognizer?.stopListening()
-        _isListening.value = false
+        Handler(Looper.getMainLooper()).post {
+            try {
+                speechRecognizer?.stopListening()
+            } catch (e: Exception) {
+                // Ignore
+            } finally {
+                _isListening.value = false
+            }
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
-        speechRecognizer?.destroy()
+        Handler(Looper.getMainLooper()).post {
+            try {
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
+            } catch (e: Exception) {
+                // Ignore
+            } finally {
+                speechRecognizer = null
+            }
+        }
     }
 }
