@@ -33,10 +33,15 @@ import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -534,6 +539,7 @@ fun ScaleAssistantApp(
     // Modal de Backup / Importação / Exportação Completo
     if (isDataBackupDialogOpen) {
         DataBackupDialog(
+            viewModel = viewModel,
             onDismiss = { isDataBackupDialogOpen = false },
             onExportCsv = {
                 exportCsvLauncher.launch("produtos_balanca_${System.currentTimeMillis()}.csv")
@@ -1414,10 +1420,11 @@ fun ProductFormDialog(
 }
 
 /**
- * Diálogo de Backup, Importação e Exportação (CSV e ZIP com Fotos)
+ * Diálogo de Backup, Importação, Exportação e Sincronização Nuvem (Google Sheets & Drive)
  */
 @Composable
 fun DataBackupDialog(
+    viewModel: ProductViewModel,
     onDismiss: () -> Unit,
     onExportCsv: () -> Unit,
     onCopyCsv: () -> Unit,
@@ -1425,25 +1432,40 @@ fun DataBackupDialog(
     onExportZip: () -> Unit,
     onImportZip: () -> Unit
 ) {
+    val context = LocalContext.current
+    val currentSession by viewModel.currentSession.collectAsState()
+    val isSyncingSheets by viewModel.isSyncingSheets.collectAsState()
+    val sheetsSyncNotice by viewModel.sheetsSyncNotice.collectAsState()
+
+    var matriculaInput by remember { mutableStateOf("") }
+    var senhaInput by remember { mutableStateOf("") }
+    var loginError by remember { mutableStateOf<String?>(null) }
+    var isLoggingIn by remember { mutableStateOf(false) }
+
+    val scrollState = rememberScrollState()
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = SurfaceDark,
             border = BorderStroke(1.dp, SurfaceVariantDark),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.92f)
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxSize()
                     .padding(20.dp)
             ) {
+                // Top Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Importar / Exportar Dados",
+                        text = "Dados & Sincronização",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Bold,
                             color = PrimaryYellow
@@ -1454,103 +1476,284 @@ fun DataBackupDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                Text(
-                    text = "BACKUP VIA CSV (PLANILHA)",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = CodeHighlight,
-                        letterSpacing = 1.sp
-                    )
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Exporta e importa códigos, nomes, preços e unidades com UTF-8 e preservação de zeros à esquerda.",
-                    style = MaterialTheme.typography.bodySmall.copy(color = TextMuted)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = onExportCsv,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.FileDownload, contentDescription = null, tint = PrimaryYellow, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Salvar CSV", color = TextLight, fontSize = 13.sp)
-                    }
-                    Button(
-                        onClick = onImportCsv,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, tint = AccentGreen, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Importar CSV", color = TextLight, fontSize = 13.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedButton(
-                    onClick = onCopyCsv,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, tint = CodeHighlight, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Copiar CSV para Área de Transferência", color = TextLight, fontSize = 12.sp)
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Box(
+                // Scrollable content
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(SurfaceVariantDark)
-                )
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = "BACKUP COMPLETO EM ZIP (PRODUTOS + FOTOS)",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryYellow,
-                        letterSpacing = 1.sp
+                        .weight(1f)
+                        .verticalScroll(scrollState)
+                ) {
+                    // SEÇÃO 1: SINCRONIZAÇÃO NUVEM COM GOOGLE SHEETS & DRIVE
+                    Text(
+                        text = "SINCRONIZAÇÃO NUVEM (GOOGLE SHEETS & DRIVE)",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryYellow,
+                            letterSpacing = 1.sp
+                        )
                     )
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Gera um arquivo ZIP com todos os produtos e suas respectivas fotografias associadas.",
-                    style = MaterialTheme.typography.bodySmall.copy(color = TextMuted)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = onExportZip,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryYellow),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.FileDownload, contentDescription = null, tint = BackgroundDark, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Exportar ZIP", color = BackgroundDark, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Autenticação por Matrícula e Senha Individual com hash seguro e salt. Os produtos e fotos do Drive são salvos no celular para uso 100% offline.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = TextMuted)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (currentSession == null) {
+                        // Formulário de Login do Operador
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = BackgroundDark,
+                            border = BorderStroke(1.dp, SurfaceVariantDark),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "Acesso do Operador da Balança",
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextLight
+                                    )
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                OutlinedTextField(
+                                    value = matriculaInput,
+                                    onValueChange = { matriculaInput = it },
+                                    label = { Text("Matrícula (ex: OP001)") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    leadingIcon = {
+                                        Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = PrimaryYellow, modifier = Modifier.size(20.dp))
+                                    },
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = PrimaryYellow,
+                                        focusedLabelColor = PrimaryYellow,
+                                        focusedTextColor = TextLight,
+                                        unfocusedTextColor = TextLight
+                                    )
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                OutlinedTextField(
+                                    value = senhaInput,
+                                    onValueChange = { senhaInput = it },
+                                    label = { Text("Senha Individual") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    visualTransformation = PasswordVisualTransformation(),
+                                    leadingIcon = {
+                                        Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = PrimaryYellow, modifier = Modifier.size(20.dp))
+                                    },
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = PrimaryYellow,
+                                        focusedLabelColor = PrimaryYellow,
+                                        focusedTextColor = TextLight,
+                                        unfocusedTextColor = TextLight
+                                    )
+                                )
+
+                                loginError?.let { err ->
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(text = err, style = MaterialTheme.typography.bodySmall.copy(color = DangerRed))
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Button(
+                                    onClick = {
+                                        if (matriculaInput.isBlank() || senhaInput.isBlank()) {
+                                            loginError = "Informe a matrícula e a senha."
+                                            return@Button
+                                        }
+                                        loginError = null
+                                        isLoggingIn = true
+                                        viewModel.loginOperator(matriculaInput, senhaInput) { success, msg ->
+                                            isLoggingIn = false
+                                            if (!success) {
+                                                loginError = msg
+                                            } else {
+                                                senhaInput = ""
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryYellow),
+                                    shape = RoundedCornerShape(10.dp),
+                                    enabled = !isLoggingIn
+                                ) {
+                                    if (isLoggingIn) {
+                                        Text("Autenticando...", color = BackgroundDark, fontWeight = FontWeight.Bold)
+                                    } else {
+                                        Text("Entrar & Sincronizar", color = BackgroundDark, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Painel de Operador Autenticado
+                        val session = currentSession!!
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = BackgroundDark,
+                            border = BorderStroke(1.dp, AccentGreen.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = AccentGreen, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Column {
+                                            Text(
+                                                text = session.nome,
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = TextLight)
+                                            )
+                                            Text(
+                                                text = "Matrícula: ${session.matricula} • Sessão Ativa",
+                                                style = MaterialTheme.typography.labelSmall.copy(color = AccentGreen)
+                                            )
+                                        }
+                                    }
+                                    TextButton(onClick = { viewModel.logoutOperator() }) {
+                                        Text("Sair", color = DangerRed, fontSize = 12.sp)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Button(
+                                    onClick = {
+                                        viewModel.syncWithSheets(context) { _, _ -> }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryYellow),
+                                    shape = RoundedCornerShape(10.dp),
+                                    enabled = !isSyncingSheets
+                                ) {
+                                    Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = BackgroundDark, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isSyncingSheets) "Sincronizando..." else "Sincronizar Catálogo Agora",
+                                        color = BackgroundDark,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                if (isSyncingSheets && sheetsSyncNotice != null) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = sheetsSyncNotice!!,
+                                        style = MaterialTheme.typography.labelSmall.copy(color = PrimaryYellow)
+                                    )
+                                }
+                            }
+                        }
                     }
-                    Button(
-                        onClick = onImportZip,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark),
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(SurfaceVariantDark))
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // SEÇÃO 2: BACKUP VIA CSV
+                    Text(
+                        text = "BACKUP VIA CSV (PLANILHA EXCEL)",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = CodeHighlight,
+                            letterSpacing = 1.sp
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Exporta e importa códigos, nomes, preços e unidades com UTF-8 e preservação de zeros à esquerda.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = TextMuted)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = onExportCsv,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.FileDownload, contentDescription = null, tint = PrimaryYellow, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Salvar CSV", color = TextLight, fontSize = 13.sp)
+                        }
+                        Button(
+                            onClick = onImportCsv,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, tint = AccentGreen, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Importar CSV", color = TextLight, fontSize = 13.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedButton(
+                        onClick = onCopyCsv,
+                        modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, tint = PrimaryYellow, modifier = Modifier.size(18.dp))
+                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, tint = CodeHighlight, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Restaurar ZIP", color = TextLight, fontSize = 13.sp)
+                        Text("Copiar CSV para Área de Transferência", color = TextLight, fontSize = 12.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(SurfaceVariantDark))
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // SEÇÃO 3: BACKUP COMPLETO EM ZIP
+                    Text(
+                        text = "BACKUP COMPLETO EM ZIP (PRODUTOS + FOTOS)",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryYellow,
+                            letterSpacing = 1.sp
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Gera um arquivo ZIP com todos os produtos e suas respectivas fotografias associadas.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = TextMuted)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = onExportZip,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryYellow),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.FileDownload, contentDescription = null, tint = BackgroundDark, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Exportar ZIP", color = BackgroundDark, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                        Button(
+                            onClick = onImportZip,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, tint = PrimaryYellow, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Restaurar ZIP", color = TextLight, fontSize = 13.sp)
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.align(Alignment.End)

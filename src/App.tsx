@@ -695,13 +695,18 @@ export default function App() {
         onClose={() => setIsAndroidModalOpen(false)}
       />
 
-      {/* Modal da Área: Importar/Exportar Dados (CSV com prévia segura e Backup com Fotos) */}
+      {/* Modal da Área: Importar/Exportar Dados (CSV com prévia segura, Backup com Fotos e Sincronização Sheets) */}
       <DataBackupModal
         isOpen={isDataBackupModalOpen}
         products={products}
         onClose={() => setIsDataBackupModalOpen(false)}
         onImportProducts={handleImportProductsFromCsv}
         onRestoreFullBackup={handleRestoreFullBackup}
+        onUpdateProducts={(updated) => {
+          setProducts(updated);
+          saveProducts(updated);
+          showToast(`Catálogo sincronizado com a nuvem (${updated.length} produtos)!`);
+        }}
       />
     </div>
   );

@@ -13,8 +13,18 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
+  Cloud,
+  Lock,
+  UserCheck,
+  LogOut,
+  KeyRound,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  Database,
+  ExternalLink,
 } from 'lucide-react';
-import { Product } from '../types';
+import { Product, OperatorSession } from '../types';
 import {
   downloadCsvFile,
   parseCsvContent,
@@ -22,6 +32,15 @@ import {
   downloadFullBackupZip,
   parseBackupFile,
 } from '../utils/csv';
+import {
+  loginOperator,
+  logoutOperator,
+  syncSheetsCatalog,
+  getStoredSession,
+  getStoredApiUrl,
+  saveStoredApiUrl,
+  DEFAULT_SHEETS_API_URL,
+} from '../utils/sheetsAuthSync';
 
 interface DataBackupModalProps {
   isOpen: boolean;
@@ -38,9 +57,10 @@ interface DataBackupModalProps {
     mode: 'merge' | 'skipDuplicates' | 'replace'
   ) => void;
   onRestoreFullBackup: (restored: Product[]) => void;
+  onUpdateProducts?: (restored: Product[]) => void;
 }
 
-type TabType = 'exportCsv' | 'importCsv' | 'fullBackup';
+type TabType = 'exportCsv' | 'importCsv' | 'fullBackup' | 'sheetsSync';
 type DuplicateMode = 'merge' | 'skipDuplicates' | 'replace';
 
 export const DataBackupModal: React.FC<DataBackupModalProps> = ({
@@ -49,6 +69,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
   onClose,
   onImportProducts,
   onRestoreFullBackup,
+  onUpdateProducts,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('importCsv');
 
@@ -67,11 +88,28 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
     withPhotos: number;
     items: Product[];
   } | null>(null);
+  const [isProcessingBackupFile, setIsProcessingBackupFile] = useState(false);
+
+  // Estados de Sincronização Google Sheets & Drive (Autenticação Operador)
+  const [session, setSession] = useState<OperatorSession | null>(() => getStoredSession());
+  const [apiUrl, setApiUrl] = useState<string>(() => getStoredApiUrl());
+  const [showApiSettings, setShowApiSettings] = useState(false);
+  const [matriculaInput, setMatriculaInput] = useState('');
+  const [senhaInput, setSenhaInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<string | null>(null);
+  const [syncFeedback, setSyncFeedback] = useState<{
+    sucesso: boolean;
+    mensagem: string;
+    totalNovos?: number;
+    totalAtualizados?: number;
+  } | null>(null);
 
   const fileCsvInputRef = useRef<HTMLInputElement>(null);
   const fileBackupInputRef = useRef<HTMLInputElement>(null);
-
-  if (!isOpen) return null;
 
   // Lógica de leitura do CSV
   const handleCsvFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,7 +167,6 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
   };
 
   // Lógica de Backup Completo com Fotos (.ZIP ou .JSON)
-  const [isProcessingBackupFile, setIsProcessingBackupFile] = useState(false);
 
   const handleFullBackupSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -169,6 +206,76 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
     onClose();
   };
 
+  // Métodos de autenticação e sincronização com Google Sheets & Drive
+  const handleLoginOperator = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!matriculaInput.trim() || !senhaInput.trim()) {
+      setLoginError('Informe a matrícula e a senha individual do operador.');
+      return;
+    }
+    setLoginError(null);
+    setIsLoggingIn(true);
+    try {
+      const res = await loginOperator(apiUrl, matriculaInput, senhaInput);
+      if (res.sucesso && res.sessao) {
+        setSession(res.sessao);
+        setSenhaInput('');
+        setSyncFeedback(null);
+      } else {
+        setLoginError(res.mensagem || 'Falha na autenticação.');
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogoutOperator = async () => {
+    if (session) {
+      await logoutOperator(apiUrl, session.token);
+      setSession(null);
+      setSyncFeedback(null);
+    }
+  };
+
+  const handleSyncSheets = async () => {
+    if (!session) return;
+    setIsSyncing(true);
+    setSyncFeedback(null);
+    try {
+      const result = await syncSheetsCatalog(apiUrl, session.token, products, (prog) => {
+        setSyncProgress(prog);
+      });
+
+      if (result.sucesso && result.produtos) {
+        if (onUpdateProducts) {
+          onUpdateProducts(result.produtos);
+        } else {
+          onRestoreFullBackup(result.produtos);
+        }
+        setSyncFeedback({
+          sucesso: true,
+          mensagem: result.mensagem,
+          totalNovos: result.totalNovos,
+          totalAtualizados: result.totalAtualizados,
+        });
+      } else {
+        setSyncFeedback({
+          sucesso: false,
+          mensagem: result.mensagem,
+        });
+        const currentCheck = getStoredSession();
+        if (!currentCheck) {
+          setSession(null);
+        }
+      }
+    } finally {
+      setIsSyncing(false);
+      setSyncProgress(null);
+    }
+  };
+
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in duration-150">
       <div
@@ -186,7 +293,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
                 Importar / Exportar Dados
               </h3>
               <p className="text-xs text-slate-400">
-                Planilhas CSV e backups completos offline
+                Planilhas CSV, fotos e nuvem Google Sheets
               </p>
             </div>
           </div>
@@ -201,7 +308,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
         </div>
 
         {/* Abas Superiores */}
-        <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950 border border-slate-800 rounded-2xl my-3 shrink-0">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 bg-slate-950 border border-slate-800 rounded-2xl my-3 shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('importCsv')}
@@ -238,7 +345,20 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
             }`}
           >
             <Archive className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Backup c/ Fotos</span>
+            <span className="truncate">Backup ZIP</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('sheetsSync')}
+            className={`py-2 px-1 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
+              activeTab === 'sheetsSync'
+                ? 'bg-emerald-400 text-slate-950 shadow-md shadow-emerald-400/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <Cloud className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Nuvem Sheets</span>
           </button>
         </div>
 
@@ -617,6 +737,248 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ==================================================== */}
+          {/* ABA 4: NUVEM GOOGLE SHEETS & DRIVE (AUTENTICAÇÃO)   */}
+          {/* ==================================================== */}
+          {activeTab === 'sheetsSync' && (
+            <div className="space-y-3.5">
+              {/* Card Explicativo de Segurança */}
+              <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-2xl text-xs text-emerald-200 leading-relaxed flex items-start gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-emerald-300 block mb-0.5">
+                    Sincronização Segura com Matrícula Individual
+                  </span>
+                  Apenas operadores cadastrados com status <strong className="text-white">ATIVO</strong> podem sincronizar produtos e imagens do Google Drive. Senhas protegidas por hash <strong className="text-white">SHA-256 + Salt único</strong> (sem dados públicos, sem Firebase).
+                </div>
+              </div>
+
+              {!session ? (
+                /* FORMULÁRIO DE LOGIN DO OPERADOR */
+                <form
+                  onSubmit={handleLoginOperator}
+                  className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3"
+                >
+                  <div className="flex items-center gap-2 text-sm font-bold text-white border-b border-slate-800 pb-2">
+                    <KeyRound className="w-4 h-4 text-emerald-400" />
+                    <span>Identificação do Operador</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Matrícula do Operador
+                    </label>
+                    <input
+                      type="text"
+                      value={matriculaInput}
+                      onChange={(e) => setMatriculaInput(e.target.value)}
+                      placeholder="Ex: OP001 ou número da matrícula"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm focus:outline-none focus:border-emerald-400 font-mono uppercase"
+                      disabled={isLoggingIn}
+                      autoFocus
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Senha Individual
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={senhaInput}
+                        onChange={(e) => setSenhaInput(e.target.value)}
+                        placeholder="Digite sua senha cadastrada"
+                        className="w-full px-3 py-2 pr-10 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm focus:outline-none focus:border-emerald-400 font-mono"
+                        disabled={isLoggingIn}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                        tabIndex={-1}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {loginError && (
+                    <div className="p-2.5 bg-red-950/60 border border-red-800 rounded-xl text-red-200 text-xs flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      <span>{loginError}</span>
+                    </div>
+                  )}
+
+                  {/* Configuração avançada de URL da API */}
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowApiSettings(!showApiSettings)}
+                      className="text-[11px] text-slate-400 hover:text-slate-300 flex items-center gap-1 transition-colors"
+                    >
+                      <Database className="w-3 h-3 text-sky-400" />
+                      <span>
+                        {showApiSettings ? 'Ocultar URL da API' : 'Configurar URL do Google Apps Script'}
+                      </span>
+                      {showApiSettings ? (
+                        <ChevronUp className="w-3 h-3" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3" />
+                      )}
+                    </button>
+
+                    {showApiSettings && (
+                      <div className="mt-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2 text-xs">
+                        <label className="block text-slate-400 text-[11px]">
+                          URL do Apps Script (exec):
+                        </label>
+                        <input
+                          type="text"
+                          value={apiUrl}
+                          onChange={(e) => {
+                            setApiUrl(e.target.value);
+                            saveStoredApiUrl(e.target.value);
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-300 text-[11px] font-mono focus:outline-none focus:border-sky-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setApiUrl(DEFAULT_SHEETS_API_URL);
+                            saveStoredApiUrl(DEFAULT_SHEETS_API_URL);
+                          }}
+                          className="text-[10px] text-sky-400 hover:underline"
+                        >
+                          Restaurar URL padrão da balança
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoggingIn}
+                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isLoggingIn ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Validando credenciais...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="w-4 h-4" />
+                        <span>Acessar e Validar Operador</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              ) : (
+                /* ÁREA AUTENTICADA: INFORMAÇÕES DO OPERADOR E SINCRONIZAÇÃO */
+                <div className="space-y-3.5">
+                  <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+                        <UserCheck className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                          <span>{session.nome}</span>
+                          <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
+                            {session.matricula}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-emerald-400/90 font-medium">
+                          Sessão autenticada e ativa na planilha
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleLogoutOperator}
+                      className="py-1.5 px-2.5 rounded-xl border border-slate-700 hover:border-red-500/40 text-slate-400 hover:text-red-400 text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title="Sair da conta"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Encerrar</span>
+                    </button>
+                  </div>
+
+                  {/* Ação de Sincronizar Catálogo e Fotos */}
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-bold text-white">
+                          Sincronizar Catálogo e Imagens do Drive
+                        </h4>
+                        <p className="text-[11px] text-slate-400">
+                          Baixa os produtos da aba <em>Produtos</em> e as fotos JPG privadas da pasta <em>IMAGEM PRODUTOS</em>
+                        </p>
+                      </div>
+                      <span className="text-xs text-slate-400 font-mono bg-slate-900 px-2 py-1 rounded-lg border border-slate-800">
+                        {products.length} no app
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleSyncSheets}
+                      disabled={isSyncing}
+                      className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isSyncing ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>{syncProgress || 'Sincronizando com a planilha...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Cloud className="w-4 h-4" />
+                          <span>Sincronizar Catálogo Agora</span>
+                        </>
+                      )}
+                    </button>
+
+                    {syncFeedback && (
+                      <div
+                        className={`p-3 rounded-xl border text-xs animate-in fade-in ${
+                          syncFeedback.sucesso
+                            ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+                            : 'bg-red-950/60 border-red-800 text-red-200'
+                        }`}
+                      >
+                        <div className="font-bold flex items-center gap-1.5 mb-1">
+                          {syncFeedback.sucesso ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                            <AlertTriangle className="w-4 h-4 text-red-400" />
+                          )}
+                          <span>
+                            {syncFeedback.sucesso
+                              ? 'Catálogo atualizado com sucesso!'
+                              : 'Aviso na sincronização'}
+                          </span>
+                        </div>
+                        <p>{syncFeedback.mensagem}</p>
+                      </div>
+                    )}
+
+                    {/* Garantia Offline */}
+                    <div className="p-2.5 bg-slate-900 border border-slate-800/80 rounded-xl text-[11px] text-slate-400 leading-relaxed">
+                      <strong className="text-slate-300">Garantia 100% Offline:</strong> Todos os produtos e fotos baixados são gravados na memória segura do dispositivo. Caso você fique sem conexão ou com sinal fraco no açougue/hortifrúti, o aplicativo continua operando normalmente. Falhas de conexão nunca apagam os dados existentes.
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

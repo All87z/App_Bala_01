@@ -13,8 +13,13 @@ import android.speech.SpeechRecognizer
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.balanca.assistente.data.AppDatabase
+import com.balanca.assistente.data.OperatorSession
 import com.balanca.assistente.data.Product
 import com.balanca.assistente.data.RecentProduct
+import com.balanca.assistente.data.SessionManager
+import com.balanca.assistente.network.LoginResult
+import com.balanca.assistente.network.SheetsAuthSyncService
+import com.balanca.assistente.network.SyncCatalogResult
 import com.balanca.assistente.util.CsvHelper
 import com.balanca.assistente.util.TextNormalizer
 import kotlinx.coroutines.Dispatchers
@@ -25,10 +30,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 import java.io.InputStream
 import java.util.Locale
 
 class ProductViewModel(application: Application) : AndroidViewModel(application) {
+
+    val sessionManager = SessionManager(application)
 
     private val db = AppDatabase.getDatabase(application, viewModelScope)
     private val dao = db.productDao()
@@ -77,6 +85,16 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
 
     private val _statusNotice = MutableStateFlow<String?>(null)
     val statusNotice: StateFlow<String?> = _statusNotice.asStateFlow()
+
+    // Sessão e Sincronização Segura Google Sheets / Drive
+    private val _currentSession = MutableStateFlow<OperatorSession?>(sessionManager.getSession())
+    val currentSession: StateFlow<OperatorSession?> = _currentSession.asStateFlow()
+
+    private val _isSyncingSheets = MutableStateFlow(false)
+    val isSyncingSheets: StateFlow<Boolean> = _isSyncingSheets.asStateFlow()
+
+    private val _sheetsSyncNotice = MutableStateFlow<String?>(null)
+    val sheetsSyncNotice: StateFlow<String?> = _sheetsSyncNotice.asStateFlow()
 
     // Reconhecimento de Voz
     private val _isListening = MutableStateFlow(false)
@@ -143,6 +161,138 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
             dao.deleteRecentByCode(product.code)
             _productToDelete.value = null
             _statusNotice.value = "Produto \"${product.name}\" excluído com sucesso."
+        }
+    }
+
+    // --- AUTENTICAÇÃO E SINCRONIZAÇÃO NUVEM (GOOGLE SHEETS & DRIVE) ---
+
+    fun getEndpointUrl(): String = sessionManager.getEndpointUrl()
+    fun setEndpointUrl(url: String) = sessionManager.setEndpointUrl(url)
+
+    fun loginOperator(matricula: String, senha: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val endpoint = sessionManager.getEndpointUrl()
+            when (val result = SheetsAuthSyncService.login(endpoint, matricula, senha)) {
+                is LoginResult.Success -> {
+                    sessionManager.saveSession(
+                        token = result.session.token,
+                        matricula = result.session.matricula,
+                        nome = result.session.nome,
+                        expiresAt = result.session.expiresAt
+                    )
+                    _currentSession.value = result.session
+                    _statusNotice.value = "Operador ${result.session.nome} conectado."
+                    onResult(true, "Autenticado com sucesso!")
+                }
+                is LoginResult.Error -> {
+                    onResult(false, result.message)
+                }
+            }
+        }
+    }
+
+    fun logoutOperator() {
+        val session = _currentSession.value
+        viewModelScope.launch(Dispatchers.IO) {
+            if (session != null) {
+                SheetsAuthSyncService.logout(sessionManager.getEndpointUrl(), session.token)
+            }
+            sessionManager.clearSession()
+            _currentSession.value = null
+            _statusNotice.value = "Sessão do operador encerrada."
+        }
+    }
+
+    fun syncWithSheets(context: Context, onResult: (Boolean, String) -> Unit) {
+        val session = sessionManager.getSession()
+        if (session == null) {
+            onResult(false, "Faça login com matrícula e senha para sincronizar.")
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isSyncingSheets.value = true
+            _sheetsSyncNotice.value = "Conectando à planilha protegida..."
+            try {
+                val endpoint = sessionManager.getEndpointUrl()
+                when (val result = SheetsAuthSyncService.syncCatalog(endpoint, session.token)) {
+                    is SyncCatalogResult.SessionExpired -> {
+                        sessionManager.clearSession()
+                        _currentSession.value = null
+                        _isSyncingSheets.value = false
+                        onResult(false, result.message)
+                    }
+                    is SyncCatalogResult.Error -> {
+                        _isSyncingSheets.value = false
+                        onResult(false, result.message)
+                    }
+                    is SyncCatalogResult.Success -> {
+                        val imagesDir = File(context.filesDir, "product_images")
+                        if (!imagesDir.exists()) imagesDir.mkdirs()
+
+                        var novos = 0
+                        var atualizados = 0
+
+                        for ((idx, remote) in result.products.withIndex()) {
+                            _sheetsSyncNotice.value = "Processando ${idx + 1}/${result.products.size}: ${remote.nome}..."
+
+                            var localImagePath: String? = null
+
+                            // Se houver imagem_id do Drive, baixa com segurança pelo Apps Script
+                            if (!remote.imagemId.isNullOrEmpty()) {
+                                val destFile = File(imagesDir, "drive_${remote.imagemId}.jpg")
+                                val success = SheetsAuthSyncService.downloadDriveImage(endpoint, session.token, remote.imagemId, destFile)
+                                if (success && destFile.exists() && destFile.length() > 0) {
+                                    localImagePath = destFile.absolutePath
+                                }
+                            }
+
+                            val cleanCode = remote.codigo.trim()
+                            val existing = dao.getByCode(cleanCode)
+
+                            if (existing != null) {
+                                dao.update(
+                                    existing.copy(
+                                        name = remote.nome,
+                                        normalizedName = TextNormalizer.normalize(remote.nome),
+                                        price = remote.preco ?: existing.price,
+                                        unit = remote.unidade,
+                                        isAvailable = remote.disponibilidade,
+                                        imageUri = localImagePath ?: existing.imageUri,
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                )
+                                atualizados++
+                            } else {
+                                dao.insert(
+                                    Product(
+                                        name = remote.nome,
+                                        normalizedName = TextNormalizer.normalize(remote.nome),
+                                        code = cleanCode,
+                                        imageUri = localImagePath,
+                                        price = remote.preco,
+                                        unit = remote.unidade,
+                                        isAvailable = remote.disponibilidade,
+                                        createdAt = System.currentTimeMillis(),
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                )
+                                novos++
+                            }
+                        }
+
+                        sessionManager.setLastSyncTime(System.currentTimeMillis())
+                        _isSyncingSheets.value = false
+                        val msg = "Sincronizado: $novos novos, $atualizados atualizados. Fotos salvas no celular."
+                        _statusNotice.value = msg
+                        onResult(true, msg)
+                    }
+                }
+            } catch (e: Exception) {
+                _isSyncingSheets.value = false
+                val err = "Falha ao sincronizar: ${e.localizedMessage}. Catálogo local preservado."
+                onResult(false, err)
+            }
         }
     }
 
