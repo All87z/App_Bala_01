@@ -50,7 +50,7 @@ export async function loginOperator(
     const body = new URLSearchParams({
       action: 'login',
       matricula: matricula.trim(),
-      senha: senha.trim(),
+      senha: senha,
     });
 
     const response = await fetch(cleanUrl, {

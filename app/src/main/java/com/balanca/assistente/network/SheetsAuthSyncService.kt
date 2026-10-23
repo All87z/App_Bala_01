@@ -44,7 +44,7 @@ object SheetsAuthSyncService {
         return try {
             val postData = "action=login" +
                     "&matricula=" + URLEncoder.encode(matricula.trim(), "UTF-8") +
-                    "&senha=" + URLEncoder.encode(senha.trim(), "UTF-8")
+                    "&senha=" + URLEncoder.encode(senha, "UTF-8")
 
             val jsonStr = executeHttpRequest(endpointUrl, "POST", postData)
             val json = JSONObject(jsonStr)
