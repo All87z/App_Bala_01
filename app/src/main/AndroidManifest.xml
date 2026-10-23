@@ -1,11 +1,15 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Permite conexões de rede com o Google Apps Script -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Permissão para reconhecimento de voz da pesquisa -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <queries>
-        <!-- Permite ao app consultar se o serviço de reconhecimento de voz está instalado no Android -->
+        <!-- Permite consultar se o serviço de reconhecimento de voz está instalado -->
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
@@ -20,15 +24,18 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.AssistenteDeBalanca">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.AssistenteDeBalanca">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
         </activity>
     </application>
 
