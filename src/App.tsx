@@ -15,6 +15,7 @@ import {
   Info,
   ImagePlus,
   FileSpreadsheet,
+  Cloud,
 } from 'lucide-react';
 import { Product, RecentProduct } from './types';
 import {
@@ -322,33 +323,14 @@ export default function App() {
               <span>Gerar APK Android</span>
             </button>
 
-            {/* Área Simples: Importar/Exportar Dados (CSV e Fotos) */}
+            {/* Sincronização Nuvem Sheets */}
             <button
               onClick={() => setIsDataBackupModalOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-white border border-slate-700 text-xs font-bold transition-all shadow-sm"
-              title="Área de Importar/Exportar dados e backup de fotos"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 hover:text-white border border-slate-700 text-xs font-bold transition-all shadow-sm"
+              title="Sincronização com Google Sheets"
             >
-              <FileSpreadsheet className="w-4 h-4 text-sky-400 shrink-0" />
-              <span className="hidden md:inline">Importar/Exportar dados</span>
-              <span className="md:hidden">Backup</span>
-            </button>
-
-            {/* Atalho Exportar CSV Rápido */}
-            <button
-              onClick={handleExportCsv}
-              className="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
-              title="Baixar arquivo CSV direto"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-
-            {/* Atalho Importar CSV (Abre área de prévia segura) */}
-            <button
-              onClick={() => setIsDataBackupModalOpen(true)}
-              className="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
-              title="Importar produtos de arquivo CSV"
-            >
-              <Upload className="w-4 h-4" />
+              <Cloud className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Nuvem Sheets</span>
             </button>
 
             <input
@@ -421,33 +403,15 @@ export default function App() {
           </div>
         </div>
 
-        {/* BARRA DE AÇÕES CLARAS: EXPORTAR CSV E IMPORTAR CSV (sempre visível em smartphones e desktop) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-5">
-          <button
-            onClick={handleExportCsv}
-            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-800/90 text-slate-200 hover:text-white text-xs sm:text-sm font-semibold transition-all shadow-sm active:scale-95"
-            title="Exportar todos os produtos para CSV (compatível com Excel e UTF-8)"
-          >
-            <Download className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Exportar CSV</span>
-          </button>
-
+        {/* BARRA DE SINCRONIZAÇÃO: NUVEM SHEETS */}
+        <div className="mb-5">
           <button
             onClick={() => setIsDataBackupModalOpen(true)}
-            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-emerald-400/50 hover:bg-slate-800/90 text-slate-200 hover:text-white text-xs sm:text-sm font-semibold transition-all shadow-sm active:scale-95"
-            title="Importar catálogo de produtos de arquivo CSV com prévia e validação"
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-emerald-400/50 hover:bg-slate-800/90 text-slate-200 hover:text-white text-sm font-semibold transition-all shadow-sm active:scale-95"
+            title="Sincronizar produtos com Google Sheets"
           >
-            <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Importar CSV</span>
-          </button>
-
-          <button
-            onClick={() => setIsDataBackupModalOpen(true)}
-            className="col-span-2 sm:col-span-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-sky-400/50 hover:bg-slate-800/90 text-slate-200 hover:text-white text-xs sm:text-sm font-semibold transition-all shadow-sm active:scale-95"
-            title="Backup completo com fotos em ZIP e restauração segura"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-sky-400 shrink-0" />
-            <span>Backup com Fotos</span>
+            <Cloud className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>Nuvem Sheets</span>
           </button>
         </div>
 
@@ -510,10 +474,10 @@ export default function App() {
               <div className="flex flex-wrap gap-2 justify-center">
                 <button
                   onClick={() => setIsDataBackupModalOpen(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-bold text-sm shadow-md transition-all"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 font-bold text-sm shadow-md transition-all"
                 >
-                  <FileSpreadsheet className="w-4 h-4 text-sky-400" />
-                  <span>Sincronizar / Importar dados</span>
+                  <Cloud className="w-4 h-4 text-emerald-400" />
+                  <span>Nuvem Sheets</span>
                 </button>
               </div>
             </div>

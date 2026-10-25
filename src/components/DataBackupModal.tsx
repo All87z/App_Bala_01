@@ -71,7 +71,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
   onRestoreFullBackup,
   onUpdateProducts,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('importCsv');
+  const [activeTab, setActiveTab] = useState<TabType>('sheetsSync');
 
   // Estados da Importação de CSV
   const [csvResult, setCsvResult] = useState<CsvParseResult | null>(null);
@@ -290,10 +290,10 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg sm:text-xl font-bold text-white leading-tight">
-                Importar / Exportar Dados
+                Nuvem Sheets
               </h3>
               <p className="text-xs text-slate-400">
-                Planilhas CSV, fotos e nuvem Google Sheets
+                Sincronização com planilha Google Sheets
               </p>
             </div>
           </div>
@@ -307,57 +307,14 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
           </button>
         </div>
 
-        {/* Abas Superiores */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 bg-slate-950 border border-slate-800 rounded-2xl my-3 shrink-0">
-          <button
-            type="button"
-            onClick={() => setActiveTab('importCsv')}
-            className={`py-2 px-1 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
-              activeTab === 'importCsv'
-                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
-          >
-            <Upload className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Importar CSV</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('exportCsv')}
-            className={`py-2 px-1 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
-              activeTab === 'exportCsv'
-                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
-          >
-            <Download className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Exportar CSV</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('fullBackup')}
-            className={`py-2 px-1 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
-              activeTab === 'fullBackup'
-                ? 'bg-sky-400 text-slate-950 shadow-md shadow-sky-400/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
-          >
-            <Archive className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Backup ZIP</span>
-          </button>
-
+        {/* Aba Nuvem Sheets */}
+        <div className="flex p-1 bg-slate-950 border border-slate-800 rounded-2xl my-3 shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('sheetsSync')}
-            className={`py-2 px-1 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
-              activeTab === 'sheetsSync'
-                ? 'bg-emerald-400 text-slate-950 shadow-md shadow-emerald-400/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
+            className="w-full py-2 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all bg-emerald-400 text-slate-950 shadow-md shadow-emerald-400/20"
           >
-            <Cloud className="w-3.5 h-3.5 shrink-0" />
+            <Cloud className="w-4 h-4 shrink-0" />
             <span className="truncate">Nuvem Sheets</span>
           </button>
         </div>

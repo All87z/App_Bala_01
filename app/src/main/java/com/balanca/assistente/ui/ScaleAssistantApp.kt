@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -173,33 +174,7 @@ fun ScaleAssistantApp(
                         )
                     }
                 },
-                actions = {
-                    // Exportar CSV direto
-                    IconButton(
-                        onClick = {
-                            exportCsvLauncher.launch("produtos_balanca_${System.currentTimeMillis()}.csv")
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FileDownload,
-                            contentDescription = "Exportar CSV",
-                            tint = PrimaryYellow
-                        )
-                    }
-
-                    // Importar CSV direto
-                    IconButton(
-                        onClick = {
-                            importCsvLauncher.launch("*/*")
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FileUpload,
-                            contentDescription = "Importar CSV",
-                            tint = AccentGreen
-                        )
-                    }
-                },
+                actions = {},
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = BackgroundDark
                 )
@@ -283,96 +258,36 @@ fun ScaleAssistantApp(
                 )
             )
 
-            // Ações Imediatas: Exportar CSV e Importar CSV (sempre visíveis no celular e tablet)
-            Row(
+            // Área de Sincronização: Nuvem Sheets (Google Sheets)
+            Surface(
+                onClick = { isDataBackupDialogOpen = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                shape = RoundedCornerShape(10.dp),
+                color = SurfaceDark,
+                border = BorderStroke(1.dp, SurfaceVariantDark)
             ) {
-                Surface(
-                    onClick = {
-                        exportCsvLauncher.launch("produtos_balanca_${System.currentTimeMillis()}.csv")
-                    },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp),
-                    color = SurfaceDark,
-                    border = BorderStroke(1.dp, SurfaceVariantDark)
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FileDownload,
-                            contentDescription = "Exportar CSV",
-                            tint = PrimaryYellow,
-                            modifier = Modifier.size(16.dp)
+                    Icon(
+                        imageVector = Icons.Default.Cloud,
+                        contentDescription = "Nuvem Sheets",
+                        tint = AccentGreen,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Nuvem Sheets",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = TextLight,
+                            fontSize = 13.sp
                         )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = "Exportar CSV",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = TextLight,
-                                fontSize = 12.sp
-                            )
-                        )
-                    }
-                }
-
-                Surface(
-                    onClick = {
-                        importCsvLauncher.launch("*/*")
-                    },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp),
-                    color = SurfaceDark,
-                    border = BorderStroke(1.dp, SurfaceVariantDark)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FileUpload,
-                            contentDescription = "Importar CSV",
-                            tint = AccentGreen,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = "Importar CSV",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = TextLight,
-                                fontSize = 12.sp
-                            )
-                        )
-                    }
-                }
-
-                Surface(
-                    onClick = { isDataBackupDialogOpen = true },
-                    shape = RoundedCornerShape(10.dp),
-                    color = SurfaceDark,
-                    border = BorderStroke(1.dp, SurfaceVariantDark)
-                ) {
-                    Box(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "ZIP...",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = CodeHighlight,
-                                fontSize = 12.sp
-                            )
-                        )
-                    }
+                    )
                 }
             }
 
@@ -1399,7 +1314,7 @@ fun DataBackupDialog(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Dados & Sincronização",
+                        text = "Nuvem Sheets",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Bold,
                             color = PrimaryYellow
@@ -1590,102 +1505,6 @@ fun DataBackupDialog(
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(SurfaceVariantDark))
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // SEÇÃO 2: BACKUP VIA CSV
-                    Text(
-                        text = "BACKUP VIA CSV (PLANILHA EXCEL)",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = CodeHighlight,
-                            letterSpacing = 1.sp
-                        )
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Exporta e importa códigos, nomes, preços e unidades com UTF-8 e preservação de zeros à esquerda.",
-                        style = MaterialTheme.typography.bodySmall.copy(color = TextMuted)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = onExportCsv,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.FileDownload, contentDescription = null, tint = PrimaryYellow, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Salvar CSV", color = TextLight, fontSize = 13.sp)
-                        }
-                        Button(
-                            onClick = onImportCsv,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, tint = AccentGreen, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Importar CSV", color = TextLight, fontSize = 13.sp)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-                    OutlinedButton(
-                        onClick = onCopyCsv,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, tint = CodeHighlight, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Copiar CSV para Área de Transferência", color = TextLight, fontSize = 12.sp)
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(SurfaceVariantDark))
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // SEÇÃO 3: BACKUP COMPLETO EM ZIP
-                    Text(
-                        text = "BACKUP COMPLETO EM ZIP (PRODUTOS + FOTOS)",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryYellow,
-                            letterSpacing = 1.sp
-                        )
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Gera um arquivo ZIP com todos os produtos e suas respectivas fotografias associadas.",
-                        style = MaterialTheme.typography.bodySmall.copy(color = TextMuted)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = onExportZip,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryYellow),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.FileDownload, contentDescription = null, tint = BackgroundDark, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Exportar ZIP", color = BackgroundDark, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
-                        Button(
-                            onClick = onImportZip,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, tint = PrimaryYellow, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Restaurar ZIP", color = TextLight, fontSize = 13.sp)
-                        }
-                    }
-                }
 
                 Spacer(modifier = Modifier.height(12.dp))
                 TextButton(
