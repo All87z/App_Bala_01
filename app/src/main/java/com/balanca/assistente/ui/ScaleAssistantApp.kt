@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.balanca.assistente.data.Product
 import com.balanca.assistente.data.RecentProduct
+import com.balanca.assistente.util.TextNormalizer
 import com.balanca.assistente.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
