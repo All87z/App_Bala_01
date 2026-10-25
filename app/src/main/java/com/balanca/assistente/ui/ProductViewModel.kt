@@ -257,7 +257,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                                         normalizedName = TextNormalizer.normalize(remote.nome),
                                         price = remote.preco ?: existing.price,
                                         unit = remote.unidade,
-                                        isAvailable = remote.disponibilidade,
+                                        isAvailable = existing.isAvailable, // PRESERVA A SITUAÇÃO LOCAL DO APARELHO!
                                         imageUri = localImagePath ?: existing.imageUri,
                                         updatedAt = System.currentTimeMillis()
                                     )
@@ -272,7 +272,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                                         imageUri = localImagePath,
                                         price = remote.preco,
                                         unit = remote.unidade,
-                                        isAvailable = remote.disponibilidade,
+                                        isAvailable = true, // NOVO PRODUTO INICIA DISPONÍVEL!
                                         createdAt = System.currentTimeMillis(),
                                         updatedAt = System.currentTimeMillis()
                                     )
@@ -293,6 +293,19 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                 val err = "Falha ao sincronizar: ${e.localizedMessage}. Catálogo local preservado."
                 onResult(false, err)
             }
+        }
+    }
+
+    /**
+     * Alterna a situação Disponível/Esgotado exclusivamente neste aparelho.
+     */
+    fun toggleProductAvailability(product: Product) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val updated = product.copy(
+                isAvailable = !product.isAvailable,
+                updatedAt = System.currentTimeMillis()
+            )
+            dao.update(updated)
         }
     }
 

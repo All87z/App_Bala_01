@@ -24,8 +24,9 @@ import {
   addRecentProduct,
   removeRecentByCode,
   restoreFromIndexedDbIfEmpty,
+  saveLocalAvailability,
 } from './utils/storage';
-import { matchProduct } from './utils/textNormalizer';
+import { matchProduct, getDisplayProductName } from './utils/textNormalizer';
 import { downloadCsvFile } from './utils/csv';
 import { processGalleryImage } from './utils/imageHelper';
 import { SpotlightModal } from './components/SpotlightModal';
@@ -79,13 +80,33 @@ export default function App() {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
-    showToast(`Código ${code} copiado (${productName})`);
+    showToast(`Código ${code} copiado (${getDisplayProductName(productName)})`);
+  };
+
+  // Alterna situação Disponível/Esgotado exclusivamente neste aparelho (sem alterar planilha)
+  const handleToggleAvailability = (product: Product, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const newStatus = !(product.isAvailable !== false);
+    saveLocalAvailability(product.code, newStatus);
+    const updated = products.map((p) =>
+      p.code.toLowerCase() === product.code.toLowerCase()
+        ? { ...p, isAvailable: newStatus, updatedAt: Date.now() }
+        : p
+    );
+    setProducts(updated);
+    saveProducts(updated);
+    if (spotlightProduct && spotlightProduct.code.toLowerCase() === product.code.toLowerCase()) {
+      setSpotlightProduct({ ...spotlightProduct, isAvailable: newStatus });
+    }
+    showToast(
+      `"${getDisplayProductName(product)}" marcado como ${newStatus ? 'Disponível' : 'Esgotado'} neste aparelho.`
+    );
   };
 
   // Ao selecionar um produto (abre o destaque colossal e grava em recentes)
   const handleSelectProduct = (product: Product) => {
     setSpotlightProduct(product);
-    const updatedRecents = addRecentProduct(product.code, product.name);
+    const updatedRecents = addRecentProduct(product.code, getDisplayProductName(product));
     setRecentProducts(updatedRecents);
   };
 
@@ -337,19 +358,6 @@ export default function App() {
               accept="image/*"
               className="hidden"
             />
-
-            {/* Botão Adicionar Produto */}
-            <button
-              onClick={() => {
-                setProductToEdit(null);
-                setIsFormOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm transition-all shadow-md active:scale-95 ml-1"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span className="hidden xs:inline">Novo Produto</span>
-              <span className="xs:hidden">Novo</span>
-            </button>
           </div>
         </div>
       </header>
@@ -478,7 +486,7 @@ export default function App() {
                     {recent.code}
                   </span>
                   <span className="text-xs text-slate-300 font-medium truncate max-w-[140px]">
-                    {recent.name}
+                    {getDisplayProductName(recent.name)}
                   </span>
                 </button>
               ))}
@@ -496,26 +504,16 @@ export default function App() {
               </h3>
               <p className="text-sm text-slate-500 max-w-sm mx-auto mb-5">
                 {searchQuery
-                  ? `Não encontramos resultados para "${searchQuery}". Deseja cadastrar agora?`
-                  : 'Comece adicionando seu primeiro produto ou importando um arquivo CSV.'}
+                  ? `Não encontramos resultados para "${searchQuery}".`
+                  : 'Sincronize com a planilha Google Sheets ou importe os produtos via CSV.'}
               </p>
               <div className="flex flex-wrap gap-2 justify-center">
-                <button
-                  onClick={() => {
-                    setProductToEdit(null);
-                    setIsFormOpen(true);
-                  }}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm shadow-md transition-all"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Cadastrar Produto</span>
-                </button>
                 <button
                   onClick={() => setIsDataBackupModalOpen(true)}
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-bold text-sm shadow-md transition-all"
                 >
                   <FileSpreadsheet className="w-4 h-4 text-sky-400" />
-                  <span>Importar/Exportar dados</span>
+                  <span>Sincronizar / Importar dados</span>
                 </button>
               </div>
             </div>
@@ -568,7 +566,7 @@ export default function App() {
                     {product.code}
                   </div>
 
-                  {/* 3. NOME COMPLETO: LEGÍVEL E COM QUEBRA AUTOMÁTICA DE LINHA */}
+                  {/* 3. NOME REAL DO PRODUTO: SEM PREFIXO DE CATEGORIA */}
                   <h4
                     className={`text-base sm:text-lg font-bold leading-snug transition-colors break-words w-full ${
                       product.isAvailable !== false
@@ -576,25 +574,28 @@ export default function App() {
                         : 'text-slate-300 line-through decoration-rose-500/60'
                     }`}
                   >
-                    {product.name}
+                    {getDisplayProductName(product)}
                   </h4>
 
-                  {/* 4. STATUS DISPONÍVEL OU ESGOTADO: SEMPRE VISÍVEL */}
+                  {/* 4. STATUS DISPONÍVEL OU ESGOTADO: INTERATIVO E ARMAZENADO LOCALMENTE */}
                   <div className="my-0.5">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold tracking-wide shrink-0 ${
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleAvailability(product, e)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold tracking-wide shrink-0 transition-all active:scale-95 cursor-pointer shadow-sm ${
                         product.isAvailable !== false
-                          ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
-                          : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
+                          ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400'
+                          : 'bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-400'
                       }`}
+                      title="Toque para alternar entre Disponível e Esgotado neste aparelho"
                     >
                       <span
                         className={`w-1.5 h-1.5 rounded-full ${
                           product.isAvailable !== false ? 'bg-emerald-400' : 'bg-rose-400'
                         }`}
                       />
-                      {product.isAvailable !== false ? 'Disponível' : 'Esgotado'}
-                    </span>
+                      <span>{product.isAvailable !== false ? 'Disponível' : 'Esgotado'}</span>
+                    </button>
                   </div>
 
                   {/* 5. PREÇO E UNIDADE JUNTOS NA MESMA LINHA: EX: R$ 8,99 / kg */}
@@ -615,14 +616,14 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* LADO DIREITO: BOTÕES DE AÇÕES (COPIAR CÓDIGO, EDITAR, EXCLUIR) */}
+                {/* LADO DIREITO: BOTÃO DE AÇÃO RÁPIDA (COPIAR CÓDIGO) */}
                 <div
-                  className="shrink-0 flex flex-col items-center gap-1.5 pt-0.5"
+                  className="shrink-0 flex items-center pt-0.5"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
                     onClick={() => handleCopyCode(product.code, product.name)}
-                    className={`p-2 rounded-xl transition-colors ${
+                    className={`p-2 sm:p-2.5 rounded-xl transition-colors ${
                       copiedCode === product.code
                         ? 'bg-emerald-500/20 text-emerald-400'
                         : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800'
@@ -635,27 +636,6 @@ export default function App() {
                       <Copy className="w-5 h-5" />
                     )}
                   </button>
-
-                  <div className="flex sm:flex-col gap-1">
-                    <button
-                      onClick={() => {
-                        setProductToEdit(product);
-                        setIsFormOpen(true);
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors"
-                      title="Editar produto"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => setProductToDelete(product)}
-                      className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
-                      title="Excluir produto"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
                 </div>
               </div>
             ))
@@ -668,19 +648,9 @@ export default function App() {
         product={spotlightProduct}
         onClose={() => setSpotlightProduct(null)}
         onCopy={handleCopyCode}
+        onToggleAvailability={handleToggleAvailability}
       />
 
-      {/* Modal de Cadastro / Edição */}
-      <ProductFormModal
-        isOpen={isFormOpen}
-        productToEdit={productToEdit}
-        existingProducts={products}
-        onClose={() => {
-          setIsFormOpen(false);
-          setProductToEdit(null);
-        }}
-        onSave={handleSaveProduct}
-      />
 
       {/* Modal de Confirmação de Exclusão */}
       <DeleteConfirmModal

@@ -1,4 +1,5 @@
 import { OperatorSession, SheetsProductItem, Product } from '../types';
+import { getLocalAvailabilityMap } from './storage';
 
 const SESSION_STORAGE_KEY = 'balanca_operator_session';
 const API_URL_STORAGE_KEY = 'balanca_sheets_api_url';
@@ -179,28 +180,42 @@ export async function syncSheetsCatalog(
         }
       }
 
+      const localAvailability = getLocalAvailabilityMap();
+      const codeKey = cleanCode.toLowerCase();
+
       if (existing) {
         // Atualiza campos da planilha preservando identificadores locais
         existing.name = item.nome;
         existing.code = cleanCode;
         if (item.preco !== undefined) existing.price = String(item.preco);
         if (item.unidade !== undefined) existing.unit = item.unidade;
-        if (item.disponibilidade !== undefined) existing.isAvailable = Boolean(item.disponibilidade);
         if (item.categoria !== undefined) existing.category = item.categoria;
         existing.remoteId = item.id;
         existing.driveImageId = item.imagem_id;
         existing.imageUrl = imageUrl;
         existing.updatedAt = Date.now();
+
+        // REGRA INDISPENSÁVEL: Preserva rigorosamente a situação local do aparelho, inclusive se estiver Esgotado
+        if (localAvailability[codeKey] !== undefined) {
+          existing.isAvailable = localAvailability[codeKey];
+        } else if (existing.isAvailable !== undefined) {
+          existing.isAvailable = existing.isAvailable;
+        } else {
+          existing.isAvailable = true;
+        }
+
         totalAtualizados++;
       } else {
-        // Novo produto vindo da planilha
+        // REGRA INDISPENSÁVEL: Novo produto que chega pela sincronização inicia com situação Disponível (true)
+        const initialStatus = localAvailability[codeKey] !== undefined ? localAvailability[codeKey] : true;
+
         const fresh: Product = {
           id: `prod-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
           name: item.nome,
           code: cleanCode,
           price: item.preco !== undefined ? String(item.preco) : '',
           unit: item.unidade || 'kg',
-          isAvailable: item.disponibilidade !== undefined ? Boolean(item.disponibilidade) : true,
+          isAvailable: initialStatus,
           category: item.categoria,
           remoteId: item.id,
           driveImageId: item.imagem_id,
@@ -208,7 +223,7 @@ export async function syncSheetsCatalog(
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
-        productMap.set(cleanCode.toLowerCase(), fresh);
+        productMap.set(codeKey, fresh);
         totalNovos++;
       }
     }

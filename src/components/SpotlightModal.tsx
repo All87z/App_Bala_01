@@ -1,17 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Copy, Check, X, Scale } from 'lucide-react';
 import { Product } from '../types';
+import { getDisplayProductName } from '../utils/textNormalizer';
 
 interface SpotlightModalProps {
   product: Product | null;
   onClose: () => void;
   onCopy: (code: string, productName: string) => void;
+  onToggleAvailability?: (product: Product) => void;
 }
 
 export const SpotlightModal: React.FC<SpotlightModalProps> = ({
   product,
   onClose,
   onCopy,
+  onToggleAvailability,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -65,25 +68,28 @@ export const SpotlightModal: React.FC<SpotlightModalProps> = ({
         )}
 
         <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-2 px-4 leading-tight">
-          {product.name}
+          {getDisplayProductName(product)}
         </h3>
 
         {/* Status de Disponibilidade e Preço */}
         <div className="flex items-center justify-center gap-3 mb-5">
-          <span
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+          <button
+            type="button"
+            onClick={() => onToggleAvailability?.(product)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-sm ${
               product.isAvailable !== false
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+                : 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40'
             }`}
+            title="Toque para alternar Disponível / Esgotado neste aparelho"
           >
             <span
               className={`w-2 h-2 rounded-full ${
                 product.isAvailable !== false ? 'bg-emerald-400' : 'bg-rose-400'
               }`}
             />
-            {product.isAvailable !== false ? 'Disponível' : 'Esgotado'}
-          </span>
+            <span>{product.isAvailable !== false ? 'Disponível' : 'Esgotado'}</span>
+          </button>
 
           {product.price && (
             <span className="font-mono text-emerald-400 font-extrabold text-lg tracking-tight bg-slate-950 px-3 py-0.5 rounded-full border border-slate-800">

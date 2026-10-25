@@ -3,6 +3,36 @@ import { DEFAULT_ILLUSTRATIONS } from './imageHelper';
 
 const STORAGE_KEY_PRODUCTS = 'assistente_balanca_produtos_v1';
 const STORAGE_KEY_RECENTS = 'assistente_balanca_recentes_v1';
+const STORAGE_KEY_LOCAL_AVAILABILITY = 'assistente_balanca_local_availability_v1';
+
+/**
+ * Obtém o mapa de situação local (Disponível/Esgotado) armazenado exclusivamente neste aparelho.
+ * Chave estável: código do produto em minúsculas (ex: "prod001" ou "102").
+ */
+export function getLocalAvailabilityMap(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_LOCAL_AVAILABILITY);
+    if (!raw) return {};
+    return JSON.parse(raw) || {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Grava a situação local (Disponível/Esgotado) para um produto específico neste aparelho.
+ * Não altera a planilha nem afeta outros aparelhos.
+ */
+export function saveLocalAvailability(code: string, isAvailable: boolean): void {
+  try {
+    if (!code) return;
+    const current = getLocalAvailabilityMap();
+    current[code.trim().toLowerCase()] = isAvailable;
+    localStorage.setItem(STORAGE_KEY_LOCAL_AVAILABILITY, JSON.stringify(current));
+  } catch (err) {
+    console.error('Erro ao salvar disponibilidade local no aparelho:', err);
+  }
+}
 
 export const INITIAL_PRODUCTS: Product[] = [
   {
@@ -126,13 +156,18 @@ export function getSavedProducts(): Product[] {
       return INITIAL_PRODUCTS;
     }
 
+    const localMap = getLocalAvailabilityMap();
+
     return parsed.map((p) => {
       if (!p.imageUrl) {
         if (p.name.toLowerCase().includes('banana')) p.imageUrl = DEFAULT_ILLUSTRATIONS.banana;
         else if (p.name.toLowerCase().includes('batata')) p.imageUrl = DEFAULT_ILLUSTRATIONS.batata;
         else if (p.name.toLowerCase().includes('queijo')) p.imageUrl = DEFAULT_ILLUSTRATIONS.queijo;
       }
-      if (p.isAvailable === undefined) {
+      const codeKey = (p.code || '').trim().toLowerCase();
+      if (localMap[codeKey] !== undefined) {
+        p.isAvailable = localMap[codeKey];
+      } else if (p.isAvailable === undefined) {
         p.isAvailable = true;
       }
       if (!p.price) {

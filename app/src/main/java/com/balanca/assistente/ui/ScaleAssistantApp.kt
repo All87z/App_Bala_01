@@ -204,28 +204,6 @@ fun ScaleAssistantApp(
                 )
             )
         },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { viewModel.openAddDialog() },
-                containerColor = PrimaryYellow,
-                contentColor = BackgroundDark,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.height(48.dp),
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Adicionar Produto",
-                        modifier = Modifier.size(22.dp)
-                    )
-                },
-                text = {
-                    Text(
-                        text = "Novo Produto",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    )
-                }
-            )
-        },
         containerColor = BackgroundDark
     ) { innerPadding ->
         Column(
@@ -491,7 +469,7 @@ fun ScaleAssistantApp(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (searchQuery.isNotEmpty()) "Tente outro nome ou código" else "Clique em \"Novo Produto\" para começar",
+                            text = if (searchQuery.isNotEmpty()) "Tente outro nome ou código" else "Sincronize com a planilha para exibir os produtos",
                             style = MaterialTheme.typography.bodySmall.copy(color = TextMuted.copy(alpha = 0.7f))
                         )
                     }
@@ -505,9 +483,8 @@ fun ScaleAssistantApp(
                         ProductCard(
                             product = product,
                             onCardClick = { viewModel.openSpotlight(product) },
-                            onCopyClick = { copyCode(product.code, product.name) },
-                            onEditClick = { viewModel.openEditDialog(product) },
-                            onDeleteClick = { viewModel.requestDeleteConfirmation(product) }
+                            onCopyClick = { copyCode(product.code, TextNormalizer.getDisplayName(product.name)) },
+                            onToggleAvailability = { viewModel.toggleProductAvailability(product) }
                         )
                     }
                 }
@@ -520,19 +497,8 @@ fun ScaleAssistantApp(
         SpotlightDialog(
             product = product,
             onDismiss = { viewModel.closeSpotlight() },
-            onCopy = { copyCode(product.code, product.name) }
-        )
-    }
-
-    // Modal de Cadastro / Edição
-    if (isAddEditDialogOpen) {
-        ProductFormDialog(
-            productToEdit = productToEdit,
-            errorMessage = formErrorMessage,
-            onDismiss = { viewModel.closeAddEditDialog() },
-            onSave = { name, code, imageUri, price, unit, isAvailable ->
-                viewModel.saveProduct(name, code, imageUri, price, unit, isAvailable)
-            }
+            onCopy = { copyCode(product.code, TextNormalizer.getDisplayName(product.name)) },
+            onToggleAvailability = { viewModel.toggleProductAvailability(product) }
         )
     }
 
@@ -683,7 +649,7 @@ fun RecentProductChip(
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = recent.name,
+                text = TextNormalizer.getDisplayName(recent.name),
                 style = MaterialTheme.typography.bodyMedium.copy(
                     color = TextLight,
                     fontWeight = FontWeight.Medium
@@ -703,8 +669,7 @@ fun ProductCard(
     product: Product,
     onCardClick: () -> Unit,
     onCopyClick: () -> Unit,
-    onEditClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onToggleAvailability: () -> Unit
 ) {
     Surface(
         modifier = Modifier
@@ -753,9 +718,9 @@ fun ProductCard(
 
                         Spacer(modifier = Modifier.height(2.dp))
 
-                        // 3. NOME COMPLETO: LEGÍVEL E COM QUEBRA AUTOMÁTICA DE LINHA
+                        // 3. NOME REAL DO PRODUTO: SEM PREFIXO DE CATEGORIA
                         Text(
-                            text = product.name,
+                            text = com.balanca.assistente.util.TextNormalizer.getDisplayName(product.name),
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
@@ -768,8 +733,9 @@ fun ProductCard(
 
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        // 4. STATUS DISPONÍVEL OU ESGOTADO: SEMPRE VISÍVEL
+                        // 4. STATUS DISPONÍVEL OU ESGOTADO: INTERATIVO E PERSISTIDO LOCALMENTE NO APARELHO
                         Surface(
+                            onClick = onToggleAvailability,
                             shape = RoundedCornerShape(6.dp),
                             color = if (product.isAvailable) AccentGreen.copy(alpha = 0.2f) else DangerRed.copy(alpha = 0.2f),
                             border = BorderStroke(1.dp, if (product.isAvailable) AccentGreen.copy(alpha = 0.5f) else DangerRed.copy(alpha = 0.5f))
@@ -848,44 +814,20 @@ fun ProductCard(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // LADO DIREITO: AÇÕES (COPIAR, EDITAR, EXCLUIR)
+                    // LADO DIREITO: AÇÃO RÁPIDA (COPIAR CÓDIGO)
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.Center
                     ) {
                         IconButton(
                             onClick = onCopyClick,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.ContentCopy,
                                 contentDescription = "Copiar Código",
                                 tint = CodeHighlight,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        IconButton(
-                            onClick = onEditClick,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Editar",
-                                tint = TextMuted,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        IconButton(
-                            onClick = onDeleteClick,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Excluir",
-                                tint = DangerRed.copy(alpha = 0.85f),
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }
@@ -911,7 +853,7 @@ fun ProductCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = product.name,
+                                text = com.balanca.assistente.util.TextNormalizer.getDisplayName(product.name),
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
@@ -924,8 +866,9 @@ fun ProductCard(
 
                             Spacer(modifier = Modifier.width(6.dp))
 
-                            // Badge de Disponibilidade
+                            // Badge de Disponibilidade Clicável
                             Surface(
+                                onClick = onToggleAvailability,
                                 shape = RoundedCornerShape(6.dp),
                                 color = if (product.isAvailable) AccentGreen.copy(alpha = 0.2f) else DangerRed.copy(alpha = 0.2f),
                                 border = BorderStroke(1.dp, if (product.isAvailable) AccentGreen.copy(alpha = 0.5f) else DangerRed.copy(alpha = 0.5f))
@@ -988,44 +931,17 @@ fun ProductCard(
                             )
                         }
 
-                        // Ações Rápidas (Copiar, Editar, Excluir)
-                        Column {
-                            IconButton(
-                                onClick = onCopyClick,
-                                modifier = Modifier.size(34.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Copiar Código",
-                                    tint = CodeHighlight,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-
-                            Row {
-                                IconButton(
-                                    onClick = onEditClick,
-                                    modifier = Modifier.size(30.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = "Editar",
-                                        tint = TextMuted,
-                                        modifier = Modifier.size(17.dp)
-                                    )
-                                }
-                                IconButton(
-                                    onClick = onDeleteClick,
-                                    modifier = Modifier.size(30.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Excluir",
-                                        tint = DangerRed.copy(alpha = 0.8f),
-                                        modifier = Modifier.size(17.dp)
-                                    )
-                                }
-                            }
+                        // Ação Rápida (Copiar)
+                        IconButton(
+                            onClick = onCopyClick,
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copiar Código",
+                                tint = CodeHighlight,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
@@ -1041,7 +957,8 @@ fun ProductCard(
 fun SpotlightDialog(
     product: Product,
     onDismiss: () -> Unit,
-    onCopy: () -> Unit
+    onCopy: () -> Unit,
+    onToggleAvailability: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1066,14 +983,43 @@ fun SpotlightDialog(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = product.name,
+                    text = com.balanca.assistente.util.TextNormalizer.getDisplayName(product.name),
                     style = MaterialTheme.typography.headlineSmall.copy(
                         fontWeight = FontWeight.Bold,
                         color = TextLight,
                         textAlign = TextAlign.Center
                     )
                 )
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Badge de Disponibilidade Interativo no Destaque
+                Surface(
+                    onClick = onToggleAvailability,
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (product.isAvailable) AccentGreen.copy(alpha = 0.2f) else DangerRed.copy(alpha = 0.2f),
+                    border = BorderStroke(1.dp, if (product.isAvailable) AccentGreen.copy(alpha = 0.5f) else DangerRed.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (product.isAvailable) AccentGreen else DangerRed)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (product.isAvailable) "Disponível" else "Esgotado",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = if (product.isAvailable) AccentGreen else DangerRed
+                            )
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // NÚMERO COLOSSAL
                 Surface(
@@ -1214,34 +1160,21 @@ fun ProductFormDialog(
                 )
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Seletor de Disponibilidade: Disponível ou Esgotado
-                Row(
+                // Apenas a ação de marcar como esgotado
+                Button(
+                    onClick = { isAvailable = false },
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (!isAvailable) DangerRed else SurfaceVariantDark,
+                        contentColor = if (!isAvailable) Color.White else TextMuted
+                    ),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Button(
-                        onClick = { isAvailable = true },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isAvailable) AccentGreen else SurfaceVariantDark,
-                            contentColor = if (isAvailable) Color.White else TextMuted
-                        ),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("Disponível", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    }
-
-                    Button(
-                        onClick = { isAvailable = false },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (!isAvailable) DangerRed else SurfaceVariantDark,
-                            contentColor = if (!isAvailable) Color.White else TextMuted
-                        ),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("Esgotado", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    }
+                    Text(
+                        text = if (!isAvailable) "Produto Marcado como Esgotado" else "Marcar como Esgotado",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
