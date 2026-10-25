@@ -54,11 +54,20 @@ export async function loginOperator(
     });
 
     const response = await fetch(cleanUrl, {
-      method: 'POST',
-      body,
-    });
+  method: 'POST',
+  body,
+  redirect: 'follow',
+});
 
-    const data = await response.json();
+console.log('API status HTTP:', response.status);
+console.log('API URL utilizada:', cleanUrl);
+
+const textoResposta = await response.text();
+console.log('Resposta bruta da API:', textoResposta);
+
+const data = JSON.parse(textoResposta);
+
+    
     if (data.sucesso && data.token) {
       const sessao: OperatorSession = {
         token: data.token,
