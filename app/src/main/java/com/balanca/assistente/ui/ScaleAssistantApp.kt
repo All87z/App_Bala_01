@@ -1505,6 +1505,7 @@ fun DataBackupDialog(
                             }
                         }
                     }
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
                 TextButton(
