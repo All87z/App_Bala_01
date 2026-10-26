@@ -203,10 +203,67 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    companion object {
+        private const val AUTO_SYNC_COOLDOWN_MS = 60_000L // 1 minuto de intervalo mínimo entre sincronizações automáticas
+    }
+
+    private var lastAutoSyncAttemptTimestamp = 0L
+
+    /**
+     * Sincronização automática silenciosa ao iniciar o app ou retornar do segundo plano.
+     * Possui controle de frequência (cooldown) e não executa chamadas duplicadas.
+     */
+    fun triggerAutoSync(context: Context) {
+        if (_isSyncingSheets.value) {
+            return
+        }
+
+        val session = sessionManager.getSession() ?: return
+
+        val now = System.currentTimeMillis()
+        val timeSinceLastAttempt = now - lastAutoSyncAttemptTimestamp
+        val timeSinceLastSuccess = now - sessionManager.getLastSyncTime()
+
+        if (timeSinceLastAttempt < AUTO_SYNC_COOLDOWN_MS || timeSinceLastSuccess < AUTO_SYNC_COOLDOWN_MS) {
+            return
+        }
+
+        lastAutoSyncAttemptTimestamp = now
+        executeSheetsSync(context = context.applicationContext, isAutoSync = true, onResult = null)
+    }
+
+    /**
+     * Sincronização manual acionada pelo botão Nuvem Sheets.
+     */
     fun syncWithSheets(context: Context, onResult: (Boolean, String) -> Unit) {
+        if (_isSyncingSheets.value) {
+            onResult(false, "Sincronização já em andamento. Aguarde...")
+            return
+        }
+
         val session = sessionManager.getSession()
         if (session == null) {
             onResult(false, "Faça login com matrícula e senha para sincronizar.")
+            return
+        }
+
+        executeSheetsSync(context = context.applicationContext, isAutoSync = false, onResult = onResult)
+    }
+
+    /**
+     * Motor compartilhado e seguro de sincronização com o Google Sheets & Drive.
+     * Reutilizado tanto pelo botão manual quanto pela sincronização automática.
+     */
+    private fun executeSheetsSync(
+        context: Context,
+        isAutoSync: Boolean,
+        onResult: ((Boolean, String) -> Unit)?
+    ) {
+        val session = sessionManager.getSession()
+        if (session == null) {
+            if (!isAutoSync) {
+                onResult?.invoke(false, "Faça login com matrícula e senha para sincronizar.")
+            }
             return
         }
 
@@ -220,11 +277,15 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                         sessionManager.clearSession()
                         _currentSession.value = null
                         _isSyncingSheets.value = false
-                        onResult(false, result.message)
+                        if (!isAutoSync) {
+                            onResult?.invoke(false, result.message)
+                        }
                     }
                     is SyncCatalogResult.Error -> {
                         _isSyncingSheets.value = false
-                        onResult(false, result.message)
+                        if (!isAutoSync) {
+                            onResult?.invoke(false, result.message)
+                        }
                     }
                     is SyncCatalogResult.Success -> {
                         val imagesDir = File(context.filesDir, "product_images")
@@ -284,14 +345,18 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                         sessionManager.setLastSyncTime(System.currentTimeMillis())
                         _isSyncingSheets.value = false
                         val msg = "Sincronizado: $novos novos, $atualizados atualizados. Fotos salvas no celular."
-                        _statusNotice.value = msg
-                        onResult(true, msg)
+                        if (!isAutoSync) {
+                            _statusNotice.value = msg
+                            onResult?.invoke(true, msg)
+                        }
                     }
                 }
             } catch (e: Exception) {
                 _isSyncingSheets.value = false
                 val err = "Falha ao sincronizar: ${e.localizedMessage}. Catálogo local preservado."
-                onResult(false, err)
+                if (!isAutoSync) {
+                    onResult?.invoke(false, err)
+                }
             }
         }
     }

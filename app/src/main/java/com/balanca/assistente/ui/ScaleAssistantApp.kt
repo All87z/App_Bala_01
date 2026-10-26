@@ -83,6 +83,7 @@ fun ScaleAssistantApp(
     val formErrorMessage by viewModel.formErrorMessage.collectAsState()
     val statusNotice by viewModel.statusNotice.collectAsState()
     val isListening by viewModel.isListening.collectAsState()
+    val isSyncingSheets by viewModel.isSyncingSheets.collectAsState()
 
     var isDataBackupDialogOpen by remember { mutableStateOf(false) }
 
@@ -273,21 +274,38 @@ fun ScaleAssistantApp(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Cloud,
-                        contentDescription = "Nuvem Sheets",
-                        tint = AccentGreen,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Nuvem Sheets",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = TextLight,
-                            fontSize = 13.sp
+                    if (isSyncingSheets) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = AccentGreen,
+                            strokeWidth = 2.dp
                         )
-                    )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Sincronizando...",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = AccentGreen,
+                                fontSize = 13.sp
+                            )
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Cloud,
+                            contentDescription = "Nuvem Sheets",
+                            tint = AccentGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Nuvem Sheets",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = TextLight,
+                                fontSize = 13.sp
+                            )
+                        )
+                    }
                 }
             }
 
