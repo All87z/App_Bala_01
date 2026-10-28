@@ -18,6 +18,7 @@ data class Product(
     val name: String,
     val normalizedName: String,
     val code: String,
+    val description: String? = null,
     val imageUri: String? = null,
     val price: String? = null,
     val unit: String = "kg",

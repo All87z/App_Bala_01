@@ -417,7 +417,6 @@ fun ScaleAssistantApp(
                         ProductCard(
                             product = product,
                             onCardClick = { viewModel.openSpotlight(product) },
-                            onCopyClick = { copyCode(product.code, TextNormalizer.getDisplayName(product.name)) },
                             onToggleAvailability = { viewModel.toggleProductAvailability(product) }
                         )
                     }
@@ -602,7 +601,6 @@ fun RecentProductChip(
 fun ProductCard(
     product: Product,
     onCardClick: () -> Unit,
-    onCopyClick: () -> Unit,
     onToggleAvailability: () -> Unit
 ) {
     Surface(
@@ -664,6 +662,22 @@ fun ProductCard(
                             maxLines = 4,
                             overflow = TextOverflow.Ellipsis
                         )
+
+                        // DESCRIÇÃO CURTA DO PRODUTO (COMO É VENDIDO)
+                        if (!product.description.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = product.description.trim(),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = TextMuted,
+                                    lineHeight = 15.sp
+                                ),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(6.dp))
 
@@ -745,26 +759,6 @@ fun ProductCard(
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // LADO DIREITO: AÇÃO RÁPIDA (COPIAR CÓDIGO)
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        IconButton(
-                            onClick = onCopyClick,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ContentCopy,
-                                contentDescription = "Copiar Código",
-                                tint = CodeHighlight,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
                 }
             } else {
                 // TABLET E SMARTPHONE HORIZONTAL (>= 540dp) - Layout original lado a lado preservado
@@ -819,6 +813,21 @@ fun ProductCard(
                             }
                         }
 
+                        // DESCRIÇÃO CURTA DO PRODUTO (COMO É VENDIDO)
+                        if (!product.description.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = product.description.trim(),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = TextMuted
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
                         // Preço
                         if (!product.price.isNullOrEmpty()) {
                             Spacer(modifier = Modifier.height(2.dp))
@@ -862,19 +871,6 @@ fun ProductCard(
                                     letterSpacing = 1.sp
                                 ),
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                            )
-                        }
-
-                        // Ação Rápida (Copiar)
-                        IconButton(
-                            onClick = onCopyClick,
-                            modifier = Modifier.size(38.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ContentCopy,
-                                contentDescription = "Copiar Código",
-                                tint = CodeHighlight,
-                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
@@ -924,6 +920,18 @@ fun SpotlightDialog(
                         textAlign = TextAlign.Center
                     )
                 )
+                if (!product.description.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = product.description.trim(),
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextMuted,
+                            textAlign = TextAlign.Center
+                        )
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Badge de Disponibilidade Interativo no Destaque

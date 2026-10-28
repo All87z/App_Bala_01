@@ -18,6 +18,7 @@ data class RemoteProductDto(
     val codigo: String,
     val preco: String?,
     val categoria: String?,
+    val descricao: String?,
     val imagemId: String?,
     val atualizadoEm: String?,
     val unidade: String,
@@ -116,6 +117,15 @@ object SheetsAuthSyncService {
                 val nome = obj.optString("nome", "Produto sem nome")
                 val preco = if (obj.has("preco") && !obj.isNull("preco")) obj.getString("preco").trim() else null
                 val categoria = if (obj.has("categoria") && !obj.isNull("categoria")) obj.getString("categoria").trim() else null
+                val descricao = if (obj.has("descricao") && !obj.isNull("descricao")) {
+                    obj.getString("descricao").trim().ifBlank { null }
+                } else if (obj.has("description") && !obj.isNull("description")) {
+                    obj.getString("description").trim().ifBlank { null }
+                } else if (obj.has("desc") && !obj.isNull("desc")) {
+                    obj.getString("desc").trim().ifBlank { null }
+                } else if (obj.has("descrição") && !obj.isNull("descrição")) {
+                    obj.getString("descrição").trim().ifBlank { null }
+                } else null
                 val imagemId = if (obj.has("imagem_id") && !obj.isNull("imagem_id")) obj.getString("imagem_id").trim() else null
                 val atualizadoEm = if (obj.has("atualizado_em") && !obj.isNull("atualizado_em")) obj.getString("atualizado_em") else null
                 val unidade = obj.optString("unidade", "kg").trim().lowercase()
@@ -128,6 +138,7 @@ object SheetsAuthSyncService {
                         codigo = rawCode, // ZEROS À ESQUERDA PRESERVADOS RIGOROSAMENTE
                         preco = preco?.ifBlank { null },
                         categoria = categoria?.ifBlank { null },
+                        descricao = descricao,
                         imagemId = imagemId?.ifBlank { null },
                         atualizadoEm = atualizadoEm,
                         unidade = unidade.ifBlank { "kg" },
@@ -178,11 +189,24 @@ object SheetsAuthSyncService {
         }
     }
 
+    private fun sanitizeUrl(rawUrl: String): String {
+        val trimmed = rawUrl.trim()
+        val qIdx = trimmed.indexOf('?')
+        if (qIdx == -1) return trimmed
+        val base = trimmed.substring(0, qIdx)
+        val query = trimmed.substring(qIdx + 1)
+        val filtered = query.split("&").filterNot {
+            val key = it.substringBefore("=").lowercase().trim()
+            key == "token" || key == "senha" || key == "matricula"
+        }.joinToString("&")
+        return if (filtered.isEmpty()) base else "$base?$filtered"
+    }
+
     /**
      * Utilitário HTTP nativo com suporte obrigatório a redirecionamentos 302 do Google Apps Script
      */
     private fun executeHttpRequest(urlStr: String, method: String, postData: String?): String {
-        var currentUrl = urlStr
+        var currentUrl = sanitizeUrl(urlStr)
         var currentMethod = method
         var currentData = postData
         var redirects = 0

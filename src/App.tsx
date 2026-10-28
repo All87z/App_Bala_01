@@ -541,6 +541,13 @@ export default function App() {
                     {getDisplayProductName(product)}
                   </h4>
 
+                  {/* DESCRIÇÃO CURTA DO PRODUTO (COMO É VENDIDO) */}
+                  {product.description && (
+                    <p className="text-xs text-slate-400 font-medium leading-tight my-0.5 line-clamp-2">
+                      {product.description}
+                    </p>
+                  )}
+
                   {/* 4. STATUS DISPONÍVEL OU ESGOTADO: INTERATIVO E ARMAZENADO LOCALMENTE */}
                   <div className="my-0.5">
                     <button
@@ -578,28 +585,6 @@ export default function App() {
                       </span>
                     )}
                   </div>
-                </div>
-
-                {/* LADO DIREITO: BOTÃO DE AÇÃO RÁPIDA (COPIAR CÓDIGO) */}
-                <div
-                  className="shrink-0 flex items-center pt-0.5"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    onClick={() => handleCopyCode(product.code, product.name)}
-                    className={`p-2 sm:p-2.5 rounded-xl transition-colors ${
-                      copiedCode === product.code
-                        ? 'bg-emerald-500/20 text-emerald-400'
-                        : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800'
-                    }`}
-                    title="Copiar código com 1 toque"
-                  >
-                    {copiedCode === product.code ? (
-                      <Check className="w-5 h-5 text-emerald-400" />
-                    ) : (
-                      <Copy className="w-5 h-5" />
-                    )}
-                  </button>
                 </div>
               </div>
             ))

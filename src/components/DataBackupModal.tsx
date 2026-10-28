@@ -40,6 +40,8 @@ import {
   getStoredApiUrl,
   saveStoredApiUrl,
   DEFAULT_SHEETS_API_URL,
+  SafeDiagnostics,
+  runSafeDiagnostic,
 } from '../utils/sheetsAuthSync';
 
 interface DataBackupModalProps {
@@ -99,6 +101,9 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginDiagnostics, setLoginDiagnostics] = useState<SafeDiagnostics | null>(null);
+  const [isTestingApi, setIsTestingApi] = useState(false);
+  const [apiDiagnosticReport, setApiDiagnosticReport] = useState<any | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
   const [syncFeedback, setSyncFeedback] = useState<{
@@ -214,6 +219,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
       return;
     }
     setLoginError(null);
+    setLoginDiagnostics(null);
     setIsLoggingIn(true);
     try {
       const res = await loginOperator(apiUrl, matriculaInput, senhaInput);
@@ -221,11 +227,49 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
         setSession(res.sessao);
         setSenhaInput('');
         setSyncFeedback(null);
+        setLoginDiagnostics(null);
+        // Sincronização automática imediata e segura após confirmação de login bem-sucedido
+        await runSheetsSync(res.sessao.token);
       } else {
-        setLoginError(res.mensagem || 'Falha na autenticação.');
+        setLoginError(res.mensagem || 'Credenciais inválidas.');
+        if (res.diagnostico) {
+          setLoginDiagnostics(res.diagnostico);
+        } else {
+          // Endpoint publicado ainda não possui a nova versão do Code.gs com diagnóstico
+          setLoginDiagnostics({
+            etapaFalha: 'VERSAO_SCRIPT_DESATUALIZADA',
+            planilhaEncontrada: true,
+            abaOperadoresEncontrada: false,
+            camposIdentificados: { matricula: false, nome: false, hash: false, salt: false, status: false },
+            operadorLocalizado: false,
+            statusAtivo: false,
+            saltCompativel: false,
+            hashCompativel: false,
+          });
+        }
       }
     } finally {
       setIsLoggingIn(false);
+    }
+  };
+
+  const handleRunApiDiagnostic = async () => {
+    setIsTestingApi(true);
+    setApiDiagnosticReport(null);
+    try {
+      const res = await runSafeDiagnostic(apiUrl);
+      if (res.sucesso && res.diagnostico) {
+        setApiDiagnosticReport(res.diagnostico);
+      } else {
+        const msg = res.mensagem || 'Falha ao conectar com o script.';
+        const isOldVersion = msg.includes('não reconhecida') || msg.includes('diagnostico');
+        setApiDiagnosticReport({
+          erro: msg,
+          versaoDesatualizada: isOldVersion,
+        });
+      }
+    } finally {
+      setIsTestingApi(false);
     }
   };
 
@@ -237,12 +281,11 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
     }
   };
 
-  const handleSyncSheets = async () => {
-    if (!session) return;
+  const runSheetsSync = async (token: string) => {
     setIsSyncing(true);
     setSyncFeedback(null);
     try {
-      const result = await syncSheetsCatalog(apiUrl, session.token, products, (prog) => {
+      const result = await syncSheetsCatalog(apiUrl, token, products, (prog) => {
         setSyncProgress(prog);
       });
 
@@ -272,6 +315,11 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
       setIsSyncing(false);
       setSyncProgress(null);
     }
+  };
+
+  const handleSyncSheets = async () => {
+    if (!session) return;
+    await runSheetsSync(session.token);
   };
 
   if (!isOpen) return null;
@@ -774,6 +822,82 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
                     </div>
                   )}
 
+                  {/* Diagnóstico Seguro da Autenticação (Sem expor dados privados) */}
+                  {loginDiagnostics && (
+                    <div className="p-3 bg-slate-900 border border-slate-700/80 rounded-xl space-y-2 text-xs">
+                      <div className="flex items-center justify-between text-slate-300 font-semibold border-b border-slate-800 pb-1.5">
+                        <span className="flex items-center gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
+                          <span>Diagnóstico Seguro da Planilha</span>
+                        </span>
+                        <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                          Etapa: {loginDiagnostics.etapaFalha || 'INDEFINIDA'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px] text-slate-400">
+                        <div className="flex items-center justify-between bg-slate-950/60 px-2 py-1 rounded">
+                          <span>Planilha:</span>
+                          <span className={loginDiagnostics.planilhaEncontrada ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+                            {loginDiagnostics.planilhaEncontrada ? 'Conectada' : 'Não localizada'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between bg-slate-950/60 px-2 py-1 rounded">
+                          <span>Aba Operadores:</span>
+                          <span className={loginDiagnostics.abaOperadoresEncontrada ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+                            {loginDiagnostics.abaOperadoresEncontrada ? 'Encontrada' : 'Não localizada'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between bg-slate-950/60 px-2 py-1 rounded">
+                          <span>Matrícula na aba:</span>
+                          <span className={loginDiagnostics.operadorLocalizado ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
+                            {loginDiagnostics.operadorLocalizado ? 'Localizada' : 'Não localizada'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between bg-slate-950/60 px-2 py-1 rounded">
+                          <span>Status do cadastro:</span>
+                          <span className={loginDiagnostics.statusAtivo ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
+                            {loginDiagnostics.statusAtivo ? 'Ativo' : 'Inativo / Bloqueado'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between bg-slate-950/60 px-2 py-1 rounded">
+                          <span>Formato Salt:</span>
+                          <span className={loginDiagnostics.saltCompativel ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
+                            {loginDiagnostics.saltCompativel ? 'Compatível (256b)' : 'Incompatível'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between bg-slate-950/60 px-2 py-1 rounded">
+                          <span>Formato PBKDF2:</span>
+                          <span className={loginDiagnostics.hashCompativel ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
+                            {loginDiagnostics.hashCompativel ? 'Compatível (64-hex)' : 'Incompatível'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {loginDiagnostics.etapaFalha === 'VERSAO_SCRIPT_DESATUALIZADA' && (
+                        <div className="p-2 bg-amber-950/40 border border-amber-800/60 rounded text-[11px] text-amber-200 space-y-1">
+                          <div className="font-bold flex items-center gap-1 text-amber-300">
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                            <span>Endpoint Apps Script precisa de Nova Versão:</span>
+                          </div>
+                          <p className="text-[10px] text-amber-200/90 leading-tight">
+                            O endpoint retornou &ldquo;Credenciais inválidas&rdquo; sem o pacote de diagnóstico seguro. Copie o arquivo <strong>google-apps-script/Code.gs</strong> para o editor do Apps Script e publique uma <strong>Nova versão</strong> em <em>Implantar &gt; Gerenciar implantações &gt; Editar &gt; Versão: Nova versão</em>.
+                          </p>
+                        </div>
+                      )}
+                      {loginDiagnostics.etapaFalha === 'BUSCA_REGISTRO' && (
+                        <p className="text-[10px] text-amber-300 bg-amber-950/30 p-1.5 rounded border border-amber-800/40">
+                          Dica: A matrícula informada não foi encontrada na coluna de matrículas da aba Operadores. Verifique se digitou exatamente como cadastrado na planilha (ex: com ou sem prefixo).
+                        </p>
+                      )}
+                      {loginDiagnostics.etapaFalha === 'COMPARACAO_HASH' && (
+                        <p className="text-[10px] text-amber-300 bg-amber-950/30 p-1.5 rounded border border-amber-800/40">
+                          Dica: A matrícula foi localizada, mas a senha informada não corresponde ao hash PBKDF2 (10.000 iterações) armazenado na planilha.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   {/* Configuração avançada de URL da API */}
                   <div className="pt-1">
                     <button
@@ -806,16 +930,57 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
                           }}
                           className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-300 text-[11px] font-mono focus:outline-none focus:border-sky-400"
                         />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setApiUrl(DEFAULT_SHEETS_API_URL);
-                            saveStoredApiUrl(DEFAULT_SHEETS_API_URL);
-                          }}
-                          className="text-[10px] text-sky-400 hover:underline"
-                        >
-                          Restaurar URL padrão da balança
-                        </button>
+                        <div className="flex items-center justify-between pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setApiUrl(DEFAULT_SHEETS_API_URL);
+                              saveStoredApiUrl(DEFAULT_SHEETS_API_URL);
+                            }}
+                            className="text-[10px] text-sky-400 hover:underline"
+                          >
+                            Restaurar URL padrão da balança
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleRunApiDiagnostic}
+                            disabled={isTestingApi}
+                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-medium border border-slate-700 flex items-center gap-1"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${isTestingApi ? 'animate-spin' : ''}`} />
+                            <span>Testar Diagnóstico do Script</span>
+                          </button>
+                        </div>
+
+                        {apiDiagnosticReport && (
+                          <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-[10px] text-slate-300 space-y-1.5">
+                            {apiDiagnosticReport.versaoDesatualizada ? (
+                              <div className="text-amber-300 space-y-1">
+                                <div className="font-bold flex items-center gap-1 text-amber-400">
+                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                  <span>Endpoint Publicado Desatualizado:</span>
+                                </div>
+                                <p className="text-[10px] text-amber-200/90 leading-tight">
+                                  O Apps Script respondeu ao POST, porém ainda está rodando a versão anterior (sem a rota de diagnóstico). Copie o <strong>google-apps-script/Code.gs</strong> e publique uma <strong>Nova versão</strong> em <em>Gerenciar implantações</em>.
+                                </p>
+                              </div>
+                            ) : apiDiagnosticReport.erro ? (
+                              <div className="text-red-400">{apiDiagnosticReport.erro}</div>
+                            ) : (
+                              <>
+                                <div className="text-emerald-400 font-bold flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  <span>Diagnóstico Concluído com Sucesso:</span>
+                                </div>
+                                <div>Total de operadores: <strong>{apiDiagnosticReport.totalOperadores}</strong></div>
+                                <div>Operadores com Salt compatível: <strong>{apiDiagnosticReport.operadoresComSaltCompativel}</strong></div>
+                                <div>Operadores com Hash PBKDF2 compatível: <strong>{apiDiagnosticReport.operadoresComHashCompativel}</strong></div>
+                                <div>Operadores ativos: <strong>{apiDiagnosticReport.operadoresAtivos}</strong></div>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

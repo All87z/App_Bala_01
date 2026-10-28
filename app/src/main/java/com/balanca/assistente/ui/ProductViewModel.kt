@@ -183,6 +183,13 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                     _currentSession.value = result.session
                     _statusNotice.value = "Operador ${result.session.nome} conectado."
                     onResult(true, "Autenticado com sucesso!")
+
+                    // MELHORIA 1: Sincronização automática executada imediatamente após login bem-sucedido
+                    executeSheetsSync(
+                        context = getApplication<Application>().applicationContext,
+                        isAutoSync = false,
+                        onResult = null
+                    )
                 }
                 is LoginResult.Error -> {
                     onResult(false, result.message)
@@ -201,35 +208,6 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
             _currentSession.value = null
             _statusNotice.value = "Sessão do operador encerrada."
         }
-    }
-
-    companion object {
-        private const val AUTO_SYNC_COOLDOWN_MS = 60_000L // 1 minuto de intervalo mínimo entre sincronizações automáticas
-    }
-
-    private var lastAutoSyncAttemptTimestamp = 0L
-
-    /**
-     * Sincronização automática silenciosa ao iniciar o app ou retornar do segundo plano.
-     * Possui controle de frequência (cooldown) e não executa chamadas duplicadas.
-     */
-    fun triggerAutoSync(context: Context) {
-        if (_isSyncingSheets.value) {
-            return
-        }
-
-        val session = sessionManager.getSession() ?: return
-
-        val now = System.currentTimeMillis()
-        val timeSinceLastAttempt = now - lastAutoSyncAttemptTimestamp
-        val timeSinceLastSuccess = now - sessionManager.getLastSyncTime()
-
-        if (timeSinceLastAttempt < AUTO_SYNC_COOLDOWN_MS || timeSinceLastSuccess < AUTO_SYNC_COOLDOWN_MS) {
-            return
-        }
-
-        lastAutoSyncAttemptTimestamp = now
-        executeSheetsSync(context = context.applicationContext, isAutoSync = true, onResult = null)
     }
 
     /**
@@ -252,13 +230,21 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
 
     /**
      * Motor compartilhado e seguro de sincronização com o Google Sheets & Drive.
-     * Reutilizado tanto pelo botão manual quanto pela sincronização automática.
+     * Reutilizado após o login bem-sucedido e pelo botão manual Nuvem Sheets.
+     * Impede chamadas duplicadas ou simultâneas e preserva dados locais em caso de falha.
      */
     private fun executeSheetsSync(
         context: Context,
         isAutoSync: Boolean,
         onResult: ((Boolean, String) -> Unit)?
     ) {
+        if (_isSyncingSheets.value) {
+            if (!isAutoSync) {
+                onResult?.invoke(false, "Sincronização já em andamento. Aguarde...")
+            }
+            return
+        }
+
         val session = sessionManager.getSession()
         if (session == null) {
             if (!isAutoSync) {
@@ -318,6 +304,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                                         normalizedName = TextNormalizer.normalize(remote.nome),
                                         price = remote.preco ?: existing.price,
                                         unit = remote.unidade,
+                                        description = remote.descricao,
                                         isAvailable = existing.isAvailable, // PRESERVA A SITUAÇÃO LOCAL DO APARELHO!
                                         imageUri = localImagePath ?: existing.imageUri,
                                         updatedAt = System.currentTimeMillis()
@@ -330,6 +317,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                                         name = remote.nome,
                                         normalizedName = TextNormalizer.normalize(remote.nome),
                                         code = cleanCode,
+                                        description = remote.descricao,
                                         imageUri = localImagePath,
                                         price = remote.preco,
                                         unit = remote.unidade,
@@ -345,10 +333,8 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                         sessionManager.setLastSyncTime(System.currentTimeMillis())
                         _isSyncingSheets.value = false
                         val msg = "Sincronizado: $novos novos, $atualizados atualizados. Fotos salvas no celular."
-                        if (!isAutoSync) {
-                            _statusNotice.value = msg
-                            onResult?.invoke(true, msg)
-                        }
+                        _statusNotice.value = msg
+                        onResult?.invoke(true, msg)
                     }
                 }
             } catch (e: Exception) {

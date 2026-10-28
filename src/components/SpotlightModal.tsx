@@ -67,9 +67,15 @@ export const SpotlightModal: React.FC<SpotlightModalProps> = ({
           </div>
         )}
 
-        <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-2 px-4 leading-tight">
+        <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-1 px-4 leading-tight">
           {getDisplayProductName(product)}
         </h3>
+
+        {product.description && (
+          <p className="text-sm text-slate-300 font-medium mb-3 px-4">
+            {product.description}
+          </p>
+        )}
 
         {/* Status de Disponibilidade e Preço */}
         <div className="flex items-center justify-center gap-3 mb-5">

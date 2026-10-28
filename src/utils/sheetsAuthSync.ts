@@ -39,36 +39,92 @@ export function clearStoredSession() {
 }
 
 /**
+ * Higieniza a URL do endpoint para garantir que credenciais ou tokens
+ * nunca trafeguem na URL (query string).
+ */
+export function sanitizeApiUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim() || DEFAULT_SHEETS_API_URL;
+  try {
+    const parsed = new URL(trimmed);
+    parsed.searchParams.delete('token');
+    parsed.searchParams.delete('senha');
+    parsed.searchParams.delete('matricula');
+    return parsed.toString();
+  } catch {
+    return trimmed;
+  }
+}
+
+/**
+ * Envia uma requisição HTTP POST para o endpoint do Google Apps Script
+ * com dados exclusivamente no corpo da requisição (nunca na URL/query string).
+ *
+ * Utiliza Content-Type 'text/plain;charset=utf-8' com corpo serializado em JSON:
+ * 1. CORS Safelisted / Simple Request: evita requisição preflight OPTIONS no navegador,
+ *    a qual não possui cabeçalhos CORS nos endpoints /exec do Google Apps Script.
+ * 2. Previne falso-positivo de query string no Apps Script: o Apps Script preenche
+ *    'e.parameter' automaticamente quando o Content-Type é application/x-www-form-urlencoded,
+ *    mas mantém 'e.parameter' limpo quando o corpo é enviado como texto puro (JSON).
+ * 3. Suporta com total fidelidade caracteres complexos em senhas e tokens contendo '=', '&' ou '+'.
+ */
+async function postToAppsScript(cleanUrl: string, payload: Record<string, any>): Promise<any> {
+  const response = await fetch(cleanUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+    },
+    body: JSON.stringify(payload),
+    redirect: 'follow',
+  });
+
+  const textoResposta = await response.text();
+  try {
+    return JSON.parse(textoResposta);
+  } catch {
+    throw new Error('Resposta inesperada do servidor ao tentar comunicar com a planilha. Verifique a URL do Google Apps Script.');
+  }
+}
+
+export interface SafeDiagnostics {
+  planilhaEncontrada?: boolean;
+  abaOperadoresEncontrada?: boolean;
+  camposIdentificados?: {
+    matricula: boolean;
+    nome: boolean;
+    hash: boolean;
+    salt: boolean;
+    status: boolean;
+  };
+  operadorLocalizado?: boolean;
+  statusAtivo?: boolean;
+  saltCompativel?: boolean;
+  hashCompativel?: boolean;
+  etapaFalha?: string | null;
+}
+
+export interface LoginResult {
+  sucesso: boolean;
+  mensagem?: string;
+  sessao?: OperatorSession;
+  diagnostico?: SafeDiagnostics;
+}
+
+/**
  * Autentica o operador com matrícula e senha individual
  */
 export async function loginOperator(
   apiUrl: string,
   matricula: string,
   senha: string
-): Promise<{ sucesso: boolean; mensagem?: string; sessao?: OperatorSession }> {
+): Promise<LoginResult> {
   try {
-    const cleanUrl = apiUrl.trim() || DEFAULT_SHEETS_API_URL;
-    const body = new URLSearchParams({
+    const cleanUrl = sanitizeApiUrl(apiUrl);
+    const data = await postToAppsScript(cleanUrl, {
       action: 'login',
       matricula: matricula.trim(),
       senha: senha,
     });
 
-    const response = await fetch(cleanUrl, {
-  method: 'POST',
-  body,
-  redirect: 'follow',
-});
-
-console.log('API status HTTP:', response.status);
-console.log('API URL utilizada:', cleanUrl);
-
-const textoResposta = await response.text();
-console.log('Resposta bruta da API:', textoResposta);
-
-const data = JSON.parse(textoResposta);
-
-    
     if (data.sucesso && data.token) {
       const sessao: OperatorSession = {
         token: data.token,
@@ -77,12 +133,13 @@ const data = JSON.parse(textoResposta);
         expiresAt: data.expiresAt || Date.now() + 30 * 24 * 60 * 60 * 1000,
       };
       saveStoredSession(sessao);
-      return { sucesso: true, sessao };
+      return { sucesso: true, sessao, diagnostico: data.diagnostico };
     }
 
     return {
       sucesso: false,
-      mensagem: data.erro || 'Matrícula ou senha incorretos ou operador inativo.',
+      mensagem: data.erro || 'Credenciais inválidas.',
+      diagnostico: data.diagnostico,
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -94,16 +151,40 @@ const data = JSON.parse(textoResposta);
 }
 
 /**
+ * Executa diagnóstico estrutural seguro da aba Operadores no Apps Script
+ */
+export async function runSafeDiagnostic(apiUrl: string): Promise<{
+  sucesso: boolean;
+  diagnostico?: any;
+  mensagem?: string;
+}> {
+  try {
+    const cleanUrl = sanitizeApiUrl(apiUrl);
+    const data = await postToAppsScript(cleanUrl, { action: 'diagnostico' });
+    return {
+      sucesso: data.sucesso,
+      diagnostico: data.diagnostico,
+      mensagem: data.erro,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      sucesso: false,
+      mensagem: `Erro ao obter diagnóstico: ${message}`,
+    };
+  }
+}
+
+/**
  * Encerra a sessão no servidor e remove localmente
  */
 export async function logoutOperator(apiUrl: string, token: string): Promise<void> {
   try {
-    const cleanUrl = apiUrl.trim() || DEFAULT_SHEETS_API_URL;
-    const body = new URLSearchParams({
+    const cleanUrl = sanitizeApiUrl(apiUrl);
+    await postToAppsScript(cleanUrl, {
       action: 'logout',
       token,
     });
-    await fetch(cleanUrl, { method: 'POST', body });
   } catch {
     // Ignora erros de rede no logout
   } finally {
@@ -128,18 +209,11 @@ export async function syncSheetsCatalog(
 }> {
   try {
     onProgress?.('Conectando à planilha protegida...');
-    const cleanUrl = apiUrl.trim() || DEFAULT_SHEETS_API_URL;
-    const body = new URLSearchParams({
+    const cleanUrl = sanitizeApiUrl(apiUrl);
+    const data = await postToAppsScript(cleanUrl, {
       action: 'sincronizar',
       token,
     });
-
-    const response = await fetch(cleanUrl, {
-      method: 'POST',
-      body,
-    });
-
-    const data = await response.json();
 
     if (!data.sucesso) {
       if (data.sessaoExpirada) {
@@ -183,6 +257,24 @@ export async function syncSheetsCatalog(
       const localAvailability = getLocalAvailabilityMap();
       const codeKey = cleanCode.toLowerCase();
 
+      // Extração robusta do campo descrição com múltiplos fallbacks (descricao, description, desc, etc.)
+      const rawDesc =
+        item.descricao !== undefined
+          ? item.descricao
+          : item.description !== undefined
+          ? item.description
+          : (item as any).desc !== undefined
+          ? (item as any).desc
+          : (item as any)['descrição'] !== undefined
+          ? (item as any)['descrição']
+          : undefined;
+
+      const hasDescField = rawDesc !== undefined;
+      const cleanDesc =
+        hasDescField && rawDesc !== null && String(rawDesc).trim() !== ''
+          ? String(rawDesc).trim()
+          : undefined;
+
       if (existing) {
         // Atualiza campos da planilha preservando identificadores locais
         existing.name = item.nome;
@@ -190,6 +282,7 @@ export async function syncSheetsCatalog(
         if (item.preco !== undefined) existing.price = String(item.preco);
         if (item.unidade !== undefined) existing.unit = item.unidade;
         if (item.categoria !== undefined) existing.category = item.categoria;
+        if (hasDescField) existing.description = cleanDesc;
         existing.remoteId = item.id;
         existing.driveImageId = item.imagem_id;
         existing.imageUrl = imageUrl;
@@ -217,6 +310,7 @@ export async function syncSheetsCatalog(
           unit: item.unidade || 'kg',
           isAvailable: initialStatus,
           category: item.categoria,
+          description: cleanDesc,
           remoteId: item.id,
           driveImageId: item.imagem_id,
           imageUrl,
@@ -254,13 +348,12 @@ async function fetchDriveImageBase64(
   imageId: string
 ): Promise<string | null> {
   try {
-    const body = new URLSearchParams({
+    const cleanUrl = sanitizeApiUrl(apiUrl);
+    const data = await postToAppsScript(cleanUrl, {
       action: 'imagem',
       token,
       id: imageId,
     });
-    const res = await fetch(apiUrl, { method: 'POST', body });
-    const data = await res.json();
     if (data.sucesso && data.base64) {
       const mime = data.mimeType || 'image/jpeg';
       return `data:${mime};base64,${data.base64}`;

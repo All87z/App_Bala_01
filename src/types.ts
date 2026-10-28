@@ -7,6 +7,7 @@ export interface Product {
   unit?: string; // Unidade da balança (ex: "kg", "un")
   isAvailable?: boolean; // true = Disponível, false = Esgotado (padrão true)
   category?: string; // Categoria do produto (ex: "Hortifrúti", "Açougue")
+  description?: string; // Descrição curta de venda (ex: "Vendido por peso", "Vendido por bandeja")
   remoteId?: string; // ID na planilha Google Sheets (ex: "PROD001")
   driveImageId?: string; // ID real do arquivo JPG no Google Drive
   createdAt: number;
@@ -32,9 +33,12 @@ export interface SheetsProductItem {
   codigo: string;
   preco?: string;
   categoria?: string;
+  descricao?: string;
+  description?: string;
   imagem_id?: string;
   atualizado_em?: string;
   unidade?: string;
   disponibilidade?: boolean;
 }
+
 
