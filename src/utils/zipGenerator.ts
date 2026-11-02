@@ -211,7 +211,7 @@ dependencies {
   {
     path: 'app/src/main/res/values/strings.xml',
     content: `<resources>
-    <string name="app_name">Assistente de Balança</string>
+    <string name="app_name">Mingote</string>
 </resources>
 `,
   },
