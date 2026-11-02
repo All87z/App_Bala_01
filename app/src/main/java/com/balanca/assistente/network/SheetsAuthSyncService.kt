@@ -1,3 +1,4 @@
+
 package com.balanca.assistente.network
 
 import android.util.Base64
@@ -39,23 +40,39 @@ sealed class SyncCatalogResult {
 object SheetsAuthSyncService {
 
     /**
-     * Realiza login por Matrícula e Senha Individual contra o Google Apps Script
+     * Realiza login por Matrícula e Senha Individual contra o Google Apps Script.
+     * Envia também a identificação do aparelho.
      */
-    fun login(endpointUrl: String, matricula: String, senha: String): LoginResult {
+    fun login(
+        endpointUrl: String,
+        matricula: String,
+        senha: String,
+        aparelho: String
+    ): LoginResult {
         return try {
+            val aparelhoIdentificado = aparelho.trim().ifBlank {
+                "Android não identificado"
+            }
+
             val postData = "action=login" +
                     "&matricula=" + URLEncoder.encode(matricula.trim(), "UTF-8") +
-                    "&senha=" + URLEncoder.encode(senha, "UTF-8")
+                    "&senha=" + URLEncoder.encode(senha, "UTF-8") +
+                    "&aparelho=" + URLEncoder.encode(aparelhoIdentificado, "UTF-8")
 
             val jsonStr = executeHttpRequest(endpointUrl, "POST", postData)
             val json = JSONObject(jsonStr)
 
             if (json.optBoolean("sucesso", false)) {
                 val token = json.getString("token")
-                val expiresAt = json.optLong("expiresAt", System.currentTimeMillis() + 30L * 24 * 3600 * 1000)
+                val expiresAt = json.optLong(
+                    "expiresAt",
+                    System.currentTimeMillis() + 30L * 24 * 3600 * 1000
+                )
+
                 val opJson = json.optJSONObject("operador")
                 val opNome = opJson?.optString("nome", "Operador") ?: "Operador"
-                val opMat = opJson?.optString("matricula", matricula.trim()) ?: matricula.trim()
+                val opMat = opJson?.optString("matricula", matricula.trim())
+                    ?: matricula.trim()
 
                 LoginResult.Success(
                     OperatorSession(
@@ -70,24 +87,26 @@ object SheetsAuthSyncService {
                 LoginResult.Error(erro)
             }
         } catch (e: Exception) {
-            LoginResult.Error("Falha de conexão com o servidor: ${e.localizedMessage ?: "Verifique a internet"}")
+            LoginResult.Error(
+                "Falha de conexão com o servidor: ${e.localizedMessage ?: "Verifique a internet"}"
+            )
         }
     }
 
     /**
-     * Encerra a sessão no servidor
+     * Encerra a sessão no servidor.
      */
     fun logout(endpointUrl: String, token: String) {
         try {
             val postData = "action=logout&token=" + URLEncoder.encode(token, "UTF-8")
             executeHttpRequest(endpointUrl, "POST", postData)
         } catch (e: Exception) {
-            // Ignora falhas de rede no logout
+            // Ignora falhas de rede no logout.
         }
     }
 
     /**
-     * Sincroniza a lista de produtos (exige token de sessão válido)
+     * Sincroniza a lista de produtos (exige token de sessão válido).
      */
     fun syncCatalog(endpointUrl: String, token: String): SyncCatalogResult {
         return try {
@@ -105,7 +124,9 @@ object SheetsAuthSyncService {
                 }
             }
 
-            val array = json.optJSONArray("produtos") ?: return SyncCatalogResult.Success(emptyList(), 0)
+            val array = json.optJSONArray("produtos")
+                ?: return SyncCatalogResult.Success(emptyList(), 0)
+
             val list = mutableListOf<RemoteProductDto>()
 
             for (i in 0 until array.length()) {
@@ -115,8 +136,14 @@ object SheetsAuthSyncService {
 
                 val id = obj.optString("id", "PROD_$rawCode")
                 val nome = obj.optString("nome", "Produto sem nome")
-                val preco = if (obj.has("preco") && !obj.isNull("preco")) obj.getString("preco").trim() else null
-                val categoria = if (obj.has("categoria") && !obj.isNull("categoria")) obj.getString("categoria").trim() else null
+                val preco = if (obj.has("preco") && !obj.isNull("preco")) {
+                    obj.getString("preco").trim()
+                } else null
+
+                val categoria = if (obj.has("categoria") && !obj.isNull("categoria")) {
+                    obj.getString("categoria").trim()
+                } else null
+
                 val descricao = if (obj.has("descricao") && !obj.isNull("descricao")) {
                     obj.getString("descricao").trim().ifBlank { null }
                 } else if (obj.has("description") && !obj.isNull("description")) {
@@ -126,8 +153,15 @@ object SheetsAuthSyncService {
                 } else if (obj.has("descrição") && !obj.isNull("descrição")) {
                     obj.getString("descrição").trim().ifBlank { null }
                 } else null
-                val imagemId = if (obj.has("imagem_id") && !obj.isNull("imagem_id")) obj.getString("imagem_id").trim() else null
-                val atualizadoEm = if (obj.has("atualizado_em") && !obj.isNull("atualizado_em")) obj.getString("atualizado_em") else null
+
+                val imagemId = if (obj.has("imagem_id") && !obj.isNull("imagem_id")) {
+                    obj.getString("imagem_id").trim()
+                } else null
+
+                val atualizadoEm = if (obj.has("atualizado_em") && !obj.isNull("atualizado_em")) {
+                    obj.getString("atualizado_em")
+                } else null
+
                 val unidade = obj.optString("unidade", "kg").trim().lowercase()
                 val disp = obj.optBoolean("disponibilidade", true)
 
@@ -135,7 +169,7 @@ object SheetsAuthSyncService {
                     RemoteProductDto(
                         id = id,
                         nome = nome,
-                        codigo = rawCode, // ZEROS À ESQUERDA PRESERVADOS RIGOROSAMENTE
+                        codigo = rawCode,
                         preco = preco?.ifBlank { null },
                         categoria = categoria?.ifBlank { null },
                         descricao = descricao,
@@ -149,16 +183,23 @@ object SheetsAuthSyncService {
 
             SyncCatalogResult.Success(list, list.size)
         } catch (e: Exception) {
-            SyncCatalogResult.Error("Erro na sincronização: ${e.localizedMessage ?: "Verifique a internet"}")
+            SyncCatalogResult.Error(
+                "Erro na sincronização: ${e.localizedMessage ?: "Verifique a internet"}"
+            )
         }
     }
 
     /**
-     * Baixa a imagem privada do Google Drive via token do Apps Script e salva localmente
+     * Baixa a imagem privada do Google Drive via token do Apps Script e salva localmente.
      */
-    fun downloadDriveImage(endpointUrl: String, token: String, driveImageId: String, destFile: File): Boolean {
+    fun downloadDriveImage(
+        endpointUrl: String,
+        token: String,
+        driveImageId: String,
+        destFile: File
+    ): Boolean {
         if (destFile.exists() && destFile.length() > 0) {
-            return true // Já baixada e persistida localmente!
+            return true
         }
 
         return try {
@@ -193,19 +234,26 @@ object SheetsAuthSyncService {
         val trimmed = rawUrl.trim()
         val qIdx = trimmed.indexOf('?')
         if (qIdx == -1) return trimmed
+
         val base = trimmed.substring(0, qIdx)
         val query = trimmed.substring(qIdx + 1)
+
         val filtered = query.split("&").filterNot {
             val key = it.substringBefore("=").lowercase().trim()
             key == "token" || key == "senha" || key == "matricula"
         }.joinToString("&")
+
         return if (filtered.isEmpty()) base else "$base?$filtered"
     }
 
     /**
-     * Utilitário HTTP nativo com suporte obrigatório a redirecionamentos 302 do Google Apps Script
+     * Utilitário HTTP com suporte a redirecionamentos do Google Apps Script.
      */
-    private fun executeHttpRequest(urlStr: String, method: String, postData: String?): String {
+    private fun executeHttpRequest(
+        urlStr: String,
+        method: String,
+        postData: String?
+    ): String {
         var currentUrl = sanitizeUrl(urlStr)
         var currentMethod = method
         var currentData = postData
@@ -215,14 +263,19 @@ object SheetsAuthSyncService {
         while (redirects < maxRedirects) {
             val url = URL(currentUrl)
             val conn = url.openConnection() as HttpURLConnection
+
             conn.connectTimeout = 15000
             conn.readTimeout = 20000
-            conn.instanceFollowRedirects = false // Controlamos o redirect para suportar HTTPS->HTTPS e POST->GET do Apps Script
+            conn.instanceFollowRedirects = false
 
             if (currentMethod == "POST" && currentData != null) {
                 conn.requestMethod = "POST"
                 conn.doOutput = true
-                conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+                conn.setRequestProperty(
+                    "Content-Type",
+                    "application/x-www-form-urlencoded; charset=UTF-8"
+                )
+
                 OutputStreamWriter(conn.outputStream, "UTF-8").use { writer ->
                     writer.write(currentData)
                     writer.flush()
@@ -233,39 +286,45 @@ object SheetsAuthSyncService {
 
             val code = conn.responseCode
 
-            // Google Apps Script retorna 302 para script.googleusercontent.com
-            if (code == HttpURLConnection.HTTP_MOVED_TEMP ||
+            if (
+                code == HttpURLConnection.HTTP_MOVED_TEMP ||
                 code == HttpURLConnection.HTTP_MOVED_PERM ||
                 code == HttpURLConnection.HTTP_SEE_OTHER ||
                 code == 307
             ) {
-                val newUrl = conn.getHeaderField("Location") ?: throw Exception("Redirecionamento sem Location")
+                val newUrl = conn.getHeaderField("Location")
+                    ?: throw Exception("Redirecionamento sem Location")
+
                 conn.disconnect()
                 currentUrl = newUrl
-                currentMethod = "GET" // Ao seguir o 302 do Apps Script, a leitura do resultado é feita via GET
+                currentMethod = "GET"
                 currentData = null
                 redirects++
                 continue
             }
 
             if (code in 200..299) {
-                val reader = BufferedReader(InputStreamReader(conn.inputStream, "UTF-8"))
                 val sb = StringBuilder()
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    sb.append(line)
+
+                BufferedReader(InputStreamReader(conn.inputStream, "UTF-8")).use { reader ->
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null) {
+                        sb.append(line)
+                    }
                 }
-                reader.close()
+
                 conn.disconnect()
                 return sb.toString()
             } else {
                 val errorStream = conn.errorStream
                 val errorMsg = if (errorStream != null) {
-                    val reader = BufferedReader(InputStreamReader(errorStream, "UTF-8"))
-                    reader.readText()
+                    BufferedReader(InputStreamReader(errorStream, "UTF-8")).use {
+                        it.readText()
+                    }
                 } else {
                     "HTTP $code"
                 }
+
                 conn.disconnect()
                 throw Exception("Servidor respondeu com código $code: $errorMsg")
             }
