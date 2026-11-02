@@ -450,47 +450,16 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
-        fun getDatabase(context: Context, scope: CoroutineScope): AppDatabase {
+        fun getDatabase(context: Context, scope: CoroutineScope? = null): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "balanca_database.db"
                 )
-                    .addCallback(AppDatabaseCallback(scope))
                     .build()
                 INSTANCE = instance
                 instance
-            }
-        }
-
-        private class AppDatabaseCallback(
-            private val scope: CoroutineScope
-        ) : RoomDatabase.Callback() {
-            override fun onCreate(db: SupportSQLiteDatabase) {
-                super.onCreate(db)
-                INSTANCE?.let { database ->
-                    scope.launch(Dispatchers.IO) {
-                        val initialList = listOf(
-                            Product(
-                                name = "Banana prata",
-                                normalizedName = TextNormalizer.normalize("Banana prata"),
-                                code = "102"
-                            ),
-                            Product(
-                                name = "Batata inglesa",
-                                normalizedName = TextNormalizer.normalize("Batata inglesa"),
-                                code = "215"
-                            ),
-                            Product(
-                                name = "Queijo mussarela",
-                                normalizedName = TextNormalizer.normalize("Queijo mussarela"),
-                                code = "347"
-                            )
-                        )
-                        database.productDao().insertAll(initialList)
-                    }
-                }
             }
         }
     }

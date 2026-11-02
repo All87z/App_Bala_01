@@ -1,5 +1,4 @@
 import { Product, RecentProduct } from '../types';
-import { DEFAULT_ILLUSTRATIONS } from './imageHelper';
 
 const STORAGE_KEY_PRODUCTS = 'assistente_balanca_produtos_v1';
 const STORAGE_KEY_RECENTS = 'assistente_balanca_recentes_v1';
@@ -34,41 +33,8 @@ export function saveLocalAvailability(code: string, isAvailable: boolean): void 
   }
 }
 
-export const INITIAL_PRODUCTS: Product[] = [
-  {
-    id: 'prod-banana-prata',
-    name: 'Banana prata',
-    code: '102',
-    price: '6,99',
-    unit: 'kg',
-    isAvailable: true,
-    imageUrl: DEFAULT_ILLUSTRATIONS.banana,
-    createdAt: Date.now() - 3000,
-    updatedAt: Date.now() - 3000,
-  },
-  {
-    id: 'prod-batata-inglesa',
-    name: 'Batata inglesa',
-    code: '215',
-    price: '4,50',
-    unit: 'kg',
-    isAvailable: true,
-    imageUrl: DEFAULT_ILLUSTRATIONS.batata,
-    createdAt: Date.now() - 2000,
-    updatedAt: Date.now() - 2000,
-  },
-  {
-    id: 'prod-queijo-mussarela',
-    name: 'Queijo mussarela',
-    code: '347',
-    price: '49,90',
-    unit: 'kg',
-    isAvailable: true,
-    imageUrl: DEFAULT_ILLUSTRATIONS.queijo,
-    createdAt: Date.now() - 1000,
-    updatedAt: Date.now() - 1000,
-  },
-];
+export const INITIAL_PRODUCTS: Product[] = [];
+
 
 // IndexedDB Helper para persistência redundante de fotos e dados offline
 const IDB_NAME = 'assistente_balanca_offline_db';
@@ -147,33 +113,21 @@ export function getSavedProducts(): Product[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PRODUCTS);
     if (!raw) {
-      saveProducts(INITIAL_PRODUCTS);
-      return INITIAL_PRODUCTS;
+      return [];
     }
     const parsed: Product[] = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      saveProducts(INITIAL_PRODUCTS);
-      return INITIAL_PRODUCTS;
+    if (!Array.isArray(parsed)) {
+      return [];
     }
 
     const localMap = getLocalAvailabilityMap();
 
     return parsed.map((p) => {
-      if (!p.imageUrl) {
-        if (p.name.toLowerCase().includes('banana')) p.imageUrl = DEFAULT_ILLUSTRATIONS.banana;
-        else if (p.name.toLowerCase().includes('batata')) p.imageUrl = DEFAULT_ILLUSTRATIONS.batata;
-        else if (p.name.toLowerCase().includes('queijo')) p.imageUrl = DEFAULT_ILLUSTRATIONS.queijo;
-      }
       const codeKey = (p.code || '').trim().toLowerCase();
       if (localMap[codeKey] !== undefined) {
         p.isAvailable = localMap[codeKey];
       } else if (p.isAvailable === undefined) {
         p.isAvailable = true;
-      }
-      if (!p.price) {
-        if (p.code === '102') p.price = '6,99';
-        else if (p.code === '215') p.price = '4,50';
-        else if (p.code === '347') p.price = '49,90';
       }
       if (!p.unit) {
         p.unit = 'kg';
@@ -182,7 +136,7 @@ export function getSavedProducts(): Product[] {
     });
   } catch (error) {
     console.error('Erro ao ler produtos locais:', error);
-    return INITIAL_PRODUCTS;
+    return [];
   }
 }
 
