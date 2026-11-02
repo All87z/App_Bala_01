@@ -172,7 +172,21 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
     fun loginOperator(matricula: String, senha: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             val endpoint = sessionManager.getEndpointUrl()
-            when (val result = SheetsAuthSyncService.login(endpoint, matricula, senha)) {
+
+            // Identificação automática do fabricante e modelo do aparelho.
+            val aparelho = "${Build.MANUFACTURER} ${Build.MODEL}".trim().ifBlank {
+                "Android não identificado"
+            }
+
+            // Envia a identificação junto com a matrícula e a senha.
+            when (
+                val result = SheetsAuthSyncService.login(
+                    endpoint,
+                    matricula,
+                    senha,
+                    aparelho
+                )
+            ) {
                 is LoginResult.Success -> {
                     sessionManager.saveSession(
                         token = result.session.token,
@@ -191,6 +205,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                         onResult = null
                     )
                 }
+
                 is LoginResult.Error -> {
                     onResult(false, result.message)
                 }
@@ -267,12 +282,14 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                             onResult?.invoke(false, result.message)
                         }
                     }
+
                     is SyncCatalogResult.Error -> {
                         _isSyncingSheets.value = false
                         if (!isAutoSync) {
                             onResult?.invoke(false, result.message)
                         }
                     }
+
                     is SyncCatalogResult.Success -> {
                         val imagesDir = File(context.filesDir, "product_images")
                         if (!imagesDir.exists()) imagesDir.mkdirs()
@@ -288,7 +305,12 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                             // Se houver imagem_id do Drive, baixa com segurança pelo Apps Script
                             if (!remote.imagemId.isNullOrEmpty()) {
                                 val destFile = File(imagesDir, "drive_${remote.imagemId}.jpg")
-                                val success = SheetsAuthSyncService.downloadDriveImage(endpoint, session.token, remote.imagemId, destFile)
+                                val success = SheetsAuthSyncService.downloadDriveImage(
+                                    endpoint,
+                                    session.token,
+                                    remote.imagemId,
+                                    destFile
+                                )
                                 if (success && destFile.exists() && destFile.length() > 0) {
                                     localImagePath = destFile.absolutePath
                                 }
@@ -304,7 +326,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                                         normalizedName = TextNormalizer.normalize(remote.nome),
                                         price = remote.preco ?: existing.price,
                                         unit = remote.unidade,
-                                        description = remote.descricao,
+                                        description = remote.descricao ?: existing.description,
                                         isAvailable = existing.isAvailable, // PRESERVA A SITUAÇÃO LOCAL DO APARELHO!
                                         imageUri = localImagePath ?: existing.imageUri,
                                         updatedAt = System.currentTimeMillis()
@@ -472,7 +494,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                     }
                     importedCount++
                 }
-                _statusNotice.value = "$importedCount produtos importados com sucesso do CSV."
+                _statusNotice.value = "$importedCount produtos importados com sucesso do arquivo CSV."
             } catch (e: Exception) {
                 _statusNotice.value = "Erro ao importar CSV: ${e.localizedMessage}"
             }
