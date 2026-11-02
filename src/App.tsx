@@ -303,12 +303,9 @@ export default function App() {
               <Scale className="w-6 h-6 stroke-[2.5]" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-none flex items-center gap-2">
-                MINGOTE
+              <h1 className="text-xl sm:text-2xl font-black text-[#ffb900] tracking-tight leading-none flex items-center gap-2">
+                Produtos
               </h1>
-              <p className="text-xs text-slate-400 font-medium mt-0.5">
-                {products.length} produtos cadastrados • 100% Offline
-              </p>
             </div>
           </div>
 
