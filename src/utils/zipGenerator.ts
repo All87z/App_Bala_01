@@ -226,6 +226,44 @@ dependencies {
 `,
   },
   {
+    path: 'app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml',
+    content: `<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>
+`,
+  },
+  {
+    path: 'app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml',
+    content: `<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>
+`,
+  },
+  {
+    path: 'app/src/main/res/drawable/ic_launcher_background.xml',
+    content: `<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M0,0h108v108h-108z"/>
+</vector>
+`,
+  },
+  {
+    path: 'app/src/main/res/drawable/ic_launcher_foreground.xml',
+    content: `<?xml version="1.0" encoding="utf-8"?>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@mipmap/ic_launcher_foreground" />
+`,
+  },
+  {
     path: 'app/src/main/res/xml/backup_rules.xml',
     content: `<?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
@@ -660,6 +698,57 @@ export async function downloadAndroidProjectZip(): Promise<void> {
 
   for (const file of ANDROID_FILES) {
     zip.file(file.path, file.content);
+  }
+
+  // Empacota os ícones oficiais do Android nas diversas densidades
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = '/assets/app_icon.png';
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+    });
+
+    const densities: Record<string, { icon: number; canvas: number; logo: number }> = {
+      mdpi: { icon: 48, canvas: 108, logo: 68 },
+      hdpi: { icon: 72, canvas: 162, logo: 102 },
+      xhdpi: { icon: 96, canvas: 216, logo: 136 },
+      xxhdpi: { icon: 144, canvas: 324, logo: 204 },
+      xxxhdpi: { icon: 192, canvas: 432, logo: 272 },
+    };
+
+    for (const [density, dims] of Object.entries(densities)) {
+      // Ícone clássico padrão e redondo
+      const c1 = document.createElement('canvas');
+      c1.width = dims.icon;
+      c1.height = dims.icon;
+      const ctx1 = c1.getContext('2d');
+      if (ctx1) {
+        ctx1.drawImage(img, 0, 0, dims.icon, dims.icon);
+        const blob1 = await new Promise<Blob | null>((res) => c1.toBlob(res, 'image/png'));
+        if (blob1) {
+          zip.file(`app/src/main/res/mipmap-${density}/ic_launcher.png`, blob1);
+          zip.file(`app/src/main/res/mipmap-${density}/ic_launcher_round.png`, blob1);
+        }
+      }
+
+      // Ícone adaptativo (camada de primeiro plano na safe zone central de 72dp)
+      const c2 = document.createElement('canvas');
+      c2.width = dims.canvas;
+      c2.height = dims.canvas;
+      const ctx2 = c2.getContext('2d');
+      if (ctx2) {
+        const offset = Math.round((dims.canvas - dims.logo) / 2);
+        ctx2.drawImage(img, offset, offset, dims.logo, dims.logo);
+        const blob2 = await new Promise<Blob | null>((res) => c2.toBlob(res, 'image/png'));
+        if (blob2) {
+          zip.file(`app/src/main/res/mipmap-${density}/ic_launcher_foreground.png`, blob2);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Could not bundle binary mipmap icons in zip:', e);
   }
 
   const content = await zip.generateAsync({ type: 'blob' });
