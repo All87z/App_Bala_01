@@ -1,7 +1,6 @@
-import { Product, RecentProduct } from '../types';
+import { Product } from '../types';
 
 const STORAGE_KEY_PRODUCTS = 'assistente_balanca_produtos_v1';
-const STORAGE_KEY_RECENTS = 'assistente_balanca_recentes_v1';
 const STORAGE_KEY_LOCAL_AVAILABILITY = 'assistente_balanca_local_availability_v1';
 
 /**
@@ -165,38 +164,3 @@ export function saveProducts(products: Product[]): void {
   persistToIndexedDb(products);
 }
 
-export function getRecentProducts(): RecentProduct[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_RECENTS);
-    if (!raw) return [];
-    const parsed: RecentProduct[] = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error('Erro ao ler recentes:', error);
-    return [];
-  }
-}
-
-export function addRecentProduct(code: string, name: string): RecentProduct[] {
-  try {
-    const current = getRecentProducts().filter((item) => item.code !== code);
-    const updated: RecentProduct[] = [
-      { code, name, accessedAt: Date.now() },
-      ...current,
-    ].slice(0, 8); // Mantém os 8 mais recentes
-    localStorage.setItem(STORAGE_KEY_RECENTS, JSON.stringify(updated));
-    return updated;
-  } catch (error) {
-    console.error('Erro ao adicionar recente:', error);
-    return [];
-  }
-}
-
-export function removeRecentByCode(code: string): void {
-  try {
-    const current = getRecentProducts().filter((item) => item.code !== code);
-    localStorage.setItem(STORAGE_KEY_RECENTS, JSON.stringify(current));
-  } catch (error) {
-    console.error('Erro ao remover recente:', error);
-  }
-}

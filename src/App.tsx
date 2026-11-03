@@ -7,7 +7,6 @@ import {
   Check,
   Edit2,
   Trash2,
-  History,
   Download,
   Upload,
   Smartphone,
@@ -17,13 +16,10 @@ import {
   FileSpreadsheet,
   Cloud,
 } from 'lucide-react';
-import { Product, RecentProduct } from './types';
+import { Product } from './types';
 import {
   getSavedProducts,
   saveProducts,
-  getRecentProducts,
-  addRecentProduct,
-  removeRecentByCode,
   restoreFromIndexedDbIfEmpty,
   saveLocalAvailability,
 } from './utils/storage';
@@ -39,7 +35,6 @@ import { DataBackupModal } from './components/DataBackupModal';
 
 export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [recentProducts, setRecentProducts] = useState<RecentProduct[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
@@ -58,7 +53,6 @@ export default function App() {
   useEffect(() => {
     const loaded = getSavedProducts();
     setProducts(loaded);
-    setRecentProducts(getRecentProducts());
 
     // Se o localStorage estava limpo/vazio, recupera do IndexedDB de contingência
     restoreFromIndexedDbIfEmpty().then((idbProducts) => {
@@ -104,11 +98,9 @@ export default function App() {
     );
   };
 
-  // Ao selecionar um produto (abre o destaque colossal e grava em recentes)
+  // Ao selecionar um produto (abre o destaque colossal)
   const handleSelectProduct = (product: Product) => {
     setSpotlightProduct(product);
-    const updatedRecents = addRecentProduct(product.code, getDisplayProductName(product));
-    setRecentProducts(updatedRecents);
   };
 
   // Ref para seleção direta de imagem da galeria a partir do card
@@ -190,8 +182,6 @@ export default function App() {
     const updated = products.filter((p) => p.id !== product.id);
     setProducts(updated);
     saveProducts(updated);
-    removeRecentByCode(product.code);
-    setRecentProducts(getRecentProducts());
     showToast(`Produto "${product.name}" removido.`);
   };
 
@@ -428,32 +418,6 @@ export default function App() {
           </div>
         )}
 
-        {/* SEÇÃO DE PRODUTOS RECENTES (ÚLTIMOS CONSULTADOS) */}
-        {recentProducts.length > 0 && !searchQuery && (
-          <div className="mb-5">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-sky-400 uppercase tracking-wider mb-2">
-              <History className="w-4 h-4" />
-              <span>Consultados Recentemente</span>
-            </div>
-
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-              {recentProducts.map((recent) => (
-                <button
-                  key={recent.code}
-                  onClick={() => setSearchQuery(recent.code)}
-                  className="flex items-center gap-2 px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 rounded-xl shrink-0 transition-colors"
-                >
-                  <span className="font-mono font-black text-amber-400 text-base">
-                    {recent.code}
-                  </span>
-                  <span className="text-xs text-slate-300 font-medium truncate max-w-[140px]">
-                    {getDisplayProductName(recent.name)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* LISTA DE RESULTADOS */}
         <div className="space-y-2.5">

@@ -14,12 +14,6 @@ export interface Product {
   updatedAt: number;
 }
 
-export interface RecentProduct {
-  code: string;
-  name: string;
-  accessedAt: number;
-}
-
 export interface OperatorSession {
   token: string;
   matricula: string;
