@@ -10,6 +10,19 @@ data class OperatorSession(
     val expiresAt: Long
 )
 
+data class AdminSession(
+    val token: String,
+    val matricula: String,
+    val expiresAt: Long
+)
+
+data class OperatorRecord(
+    val matricula: String,
+    val nome: String,
+    val status: String, // "ATIVO" ou "INATIVO"
+    val criadoEm: String? = null
+)
+
 class SessionManager(context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -17,11 +30,18 @@ class SessionManager(context: Context) {
     companion object {
         private const val PREFS_NAME = "balanca_session_prefs"
         private const val KEY_ENDPOINT_URL = "sheets_endpoint_url"
+
+        // Chaves de Sessão do Operador
         private const val KEY_TOKEN = "session_token"
         private const val KEY_MATRICULA = "session_matricula"
         private const val KEY_NOME = "session_nome"
         private const val KEY_EXPIRES_AT = "session_expires_at"
         private const val KEY_LAST_SYNC_TIME = "session_last_sync_time"
+
+        // Chaves de Sessão do Administrador (Completamente independentes)
+        private const val KEY_ADMIN_TOKEN = "admin_session_token"
+        private const val KEY_ADMIN_MATRICULA = "admin_session_matricula"
+        private const val KEY_ADMIN_EXPIRES_AT = "admin_session_expires_at"
 
         const val DEFAULT_ENDPOINT_URL =
             "https://script.google.com/macros/s/AKfycbyfaojZh81dEvfsWQcmqBM28yxPq3X3tk92IDPhCINHb7E0iayjNZxNagWwyzs4ttry/exec"
@@ -34,6 +54,8 @@ class SessionManager(context: Context) {
     fun setEndpointUrl(url: String) {
         prefs.edit().putString(KEY_ENDPOINT_URL, url.trim()).apply()
     }
+
+    // --- SESSÃO DO OPERADOR ---
 
     fun saveSession(token: String, matricula: String, nome: String, expiresAt: Long) {
         prefs.edit()
@@ -78,5 +100,41 @@ class SessionManager(context: Context) {
 
     fun getLastSyncTime(): Long {
         return prefs.getLong(KEY_LAST_SYNC_TIME, 0L)
+    }
+
+    // --- SESSÃO DO ADMINISTRADOR (INDEPENDENTE) ---
+
+    fun saveAdminSession(token: String, matricula: String, expiresAt: Long) {
+        prefs.edit()
+            .putString(KEY_ADMIN_TOKEN, token)
+            .putString(KEY_ADMIN_MATRICULA, matricula)
+            .putLong(KEY_ADMIN_EXPIRES_AT, expiresAt)
+            .apply()
+    }
+
+    fun getAdminSession(): AdminSession? {
+        val token = prefs.getString(KEY_ADMIN_TOKEN, null) ?: return null
+        val matricula = prefs.getString(KEY_ADMIN_MATRICULA, "ADMIN") ?: "ADMIN"
+        val expiresAt = prefs.getLong(KEY_ADMIN_EXPIRES_AT, 0L)
+
+        // Se a sessão administrativa expirou localmente, limpa
+        if (expiresAt > 0 && System.currentTimeMillis() > expiresAt) {
+            clearAdminSession()
+            return null
+        }
+
+        return AdminSession(token, matricula, expiresAt)
+    }
+
+    fun isAdminLoggedIn(): Boolean {
+        return getAdminSession() != null
+    }
+
+    fun clearAdminSession() {
+        prefs.edit()
+            .remove(KEY_ADMIN_TOKEN)
+            .remove(KEY_ADMIN_MATRICULA)
+            .remove(KEY_ADMIN_EXPIRES_AT)
+            .apply()
     }
 }

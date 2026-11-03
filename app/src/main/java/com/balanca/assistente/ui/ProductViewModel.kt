@@ -12,11 +12,16 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.balanca.assistente.data.AdminSession
 import com.balanca.assistente.data.AppDatabase
+import com.balanca.assistente.data.OperatorRecord
 import com.balanca.assistente.data.OperatorSession
 import com.balanca.assistente.data.Product
 import com.balanca.assistente.data.RecentProduct
 import com.balanca.assistente.data.SessionManager
+import com.balanca.assistente.network.AdminLoginResult
+import com.balanca.assistente.network.AdminOperationResult
+import com.balanca.assistente.network.AdminOperatorsResult
 import com.balanca.assistente.network.LoginResult
 import com.balanca.assistente.network.SheetsAuthSyncService
 import com.balanca.assistente.network.SyncCatalogResult
@@ -95,6 +100,32 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
 
     private val _sheetsSyncNotice = MutableStateFlow<String?>(null)
     val sheetsSyncNotice: StateFlow<String?> = _sheetsSyncNotice.asStateFlow()
+
+    // Sessão e Gestão da Área do Administrador (Totalmente Independente)
+    private val _currentAdminSession = MutableStateFlow<AdminSession?>(sessionManager.getAdminSession())
+    val currentAdminSession: StateFlow<AdminSession?> = _currentAdminSession.asStateFlow()
+
+    private val _operatorsList = MutableStateFlow<List<OperatorRecord>>(emptyList())
+    val operatorsList: StateFlow<List<OperatorRecord>> = _operatorsList.asStateFlow()
+
+    private val _operatorsTotal = MutableStateFlow(0)
+    val operatorsTotal: StateFlow<Int> = _operatorsTotal.asStateFlow()
+
+    private val _operatorsLimit = MutableStateFlow(10)
+    val operatorsLimit: StateFlow<Int> = _operatorsLimit.asStateFlow()
+
+    private val _isLoadingAdmin = MutableStateFlow(false)
+    val isLoadingAdmin: StateFlow<Boolean> = _isLoadingAdmin.asStateFlow()
+
+    private val _adminNotice = MutableStateFlow<String?>(null)
+    val adminNotice: StateFlow<String?> = _adminNotice.asStateFlow()
+
+    init {
+        // Pré-carrega operadores caso já haja sessão de administrador ativa
+        if (_currentAdminSession.value != null) {
+            loadOperatorsAdmin()
+        }
+    }
 
     // Reconhecimento de Voz
     private val _isListening = MutableStateFlow(false)
@@ -222,6 +253,238 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
             sessionManager.clearSession()
             _currentSession.value = null
             _statusNotice.value = "Sessão do operador encerrada."
+        }
+    }
+
+    // =========================================================================
+    // MÉTODOS EXCLUSIVOS DA ÁREA DO ADMINISTRADOR (OPERADORES & CREDENCIAIS)
+    // =========================================================================
+
+    fun loginAdmin(matricula: String, senha: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val endpoint = sessionManager.getEndpointUrl()
+            val aparelho = "${Build.MANUFACTURER} ${Build.MODEL}".trim().ifBlank {
+                "Android não identificado"
+            }
+            _isLoadingAdmin.value = true
+
+            when (val result = SheetsAuthSyncService.loginAdmin(endpoint, matricula, senha, aparelho)) {
+                is AdminLoginResult.Success -> {
+                    sessionManager.saveAdminSession(
+                        token = result.session.token,
+                        matricula = result.session.matricula,
+                        expiresAt = result.session.expiresAt
+                    )
+                    _currentAdminSession.value = result.session
+                    _isLoadingAdmin.value = false
+                    _adminNotice.value = "Administrador autenticado com sucesso."
+                    onResult(true, "Autenticado como administrador!")
+
+                    // Carrega imediatamente a lista de operadores após login
+                    loadOperatorsAdmin()
+                }
+                is AdminLoginResult.Error -> {
+                    _isLoadingAdmin.value = false
+                    onResult(false, result.message)
+                }
+            }
+        }
+    }
+
+    fun logoutAdmin(onResult: (() -> Unit)? = null) {
+        val session = _currentAdminSession.value
+        viewModelScope.launch(Dispatchers.IO) {
+            if (session != null) {
+                SheetsAuthSyncService.logoutAdmin(sessionManager.getEndpointUrl(), session.token)
+            }
+            sessionManager.clearAdminSession()
+            _currentAdminSession.value = null
+            _operatorsList.value = emptyList()
+            _operatorsTotal.value = 0
+            _adminNotice.value = "Sessão administrativa encerrada."
+            onResult?.invoke()
+        }
+    }
+
+    fun loadOperatorsAdmin(onResult: ((Boolean, String) -> Unit)? = null) {
+        val session = _currentAdminSession.value
+        if (session == null) {
+            onResult?.invoke(false, "Faça login como administrador.")
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingAdmin.value = true
+            when (val result = SheetsAuthSyncService.listOperatorsAdmin(sessionManager.getEndpointUrl(), session.token)) {
+                is AdminOperatorsResult.Success -> {
+                    _operatorsList.value = result.operators
+                    _operatorsTotal.value = result.total
+                    _operatorsLimit.value = result.maxLimit
+                    _isLoadingAdmin.value = false
+                    onResult?.invoke(true, "${result.operators.size} operadores carregados.")
+                }
+                is AdminOperatorsResult.SessionExpired -> {
+                    sessionManager.clearAdminSession()
+                    _currentAdminSession.value = null
+                    _operatorsList.value = emptyList()
+                    _isLoadingAdmin.value = false
+                    onResult?.invoke(false, result.message)
+                }
+                is AdminOperatorsResult.Error -> {
+                    _isLoadingAdmin.value = false
+                    onResult?.invoke(false, result.message)
+                }
+            }
+        }
+    }
+
+    fun registerOperatorAdmin(matricula: String, nome: String, senha: String, onResult: (Boolean, String) -> Unit) {
+        val session = _currentAdminSession.value
+        if (session == null) {
+            onResult(false, "Sessão administrativa não iniciada.")
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingAdmin.value = true
+            when (val result = SheetsAuthSyncService.registerOperatorAdmin(
+                sessionManager.getEndpointUrl(),
+                session.token,
+                matricula,
+                nome,
+                senha
+            )) {
+                is AdminOperationResult.Success -> {
+                    _isLoadingAdmin.value = false
+                    _adminNotice.value = result.message
+                    onResult(true, result.message)
+                    // Atualiza a lista automaticamente
+                    loadOperatorsAdmin()
+                }
+                is AdminOperationResult.SessionExpired -> {
+                    sessionManager.clearAdminSession()
+                    _currentAdminSession.value = null
+                    _isLoadingAdmin.value = false
+                    onResult(false, result.message)
+                }
+                is AdminOperationResult.Error -> {
+                    _isLoadingAdmin.value = false
+                    onResult(false, result.message)
+                }
+            }
+        }
+    }
+
+    fun updateOperatorAdmin(
+        matricula: String,
+        novoNome: String?,
+        novaSenha: String?,
+        status: String?,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val session = _currentAdminSession.value
+        if (session == null) {
+            onResult(false, "Sessão administrativa não iniciada.")
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingAdmin.value = true
+            when (val result = SheetsAuthSyncService.updateOperatorAdmin(
+                sessionManager.getEndpointUrl(),
+                session.token,
+                matricula,
+                novoNome,
+                novaSenha,
+                status
+            )) {
+                is AdminOperationResult.Success -> {
+                    _isLoadingAdmin.value = false
+                    _adminNotice.value = result.message
+                    onResult(true, result.message)
+                    loadOperatorsAdmin()
+                }
+                is AdminOperationResult.SessionExpired -> {
+                    sessionManager.clearAdminSession()
+                    _currentAdminSession.value = null
+                    _isLoadingAdmin.value = false
+                    onResult(false, result.message)
+                }
+                is AdminOperationResult.Error -> {
+                    _isLoadingAdmin.value = false
+                    onResult(false, result.message)
+                }
+            }
+        }
+    }
+
+    fun toggleOperatorStatusAdmin(matricula: String, currentStatus: String, onResult: (Boolean, String) -> Unit) {
+        val session = _currentAdminSession.value
+        if (session == null) {
+            onResult(false, "Sessão administrativa não iniciada.")
+            return
+        }
+
+        val targetStatus = if (currentStatus.trim().uppercase() == "ATIVO") "INATIVO" else "ATIVO"
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingAdmin.value = true
+            when (val result = SheetsAuthSyncService.toggleOperatorStatusAdmin(
+                sessionManager.getEndpointUrl(),
+                session.token,
+                matricula,
+                targetStatus
+            )) {
+                is AdminOperationResult.Success -> {
+                    _isLoadingAdmin.value = false
+                    _adminNotice.value = result.message
+                    onResult(true, result.message)
+                    loadOperatorsAdmin()
+                }
+                is AdminOperationResult.SessionExpired -> {
+                    sessionManager.clearAdminSession()
+                    _currentAdminSession.value = null
+                    _isLoadingAdmin.value = false
+                    onResult(false, result.message)
+                }
+                is AdminOperationResult.Error -> {
+                    _isLoadingAdmin.value = false
+                    onResult(false, result.message)
+                }
+            }
+        }
+    }
+
+    fun changeAdminPassword(novaSenha: String, onResult: (Boolean, String) -> Unit) {
+        val session = _currentAdminSession.value
+        if (session == null) {
+            onResult(false, "Sessão administrativa não iniciada.")
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingAdmin.value = true
+            when (val result = SheetsAuthSyncService.changeAdminPassword(
+                sessionManager.getEndpointUrl(),
+                session.token,
+                novaSenha
+            )) {
+                is AdminOperationResult.Success -> {
+                    _isLoadingAdmin.value = false
+                    _adminNotice.value = result.message
+                    onResult(true, result.message)
+                }
+                is AdminOperationResult.SessionExpired -> {
+                    sessionManager.clearAdminSession()
+                    _currentAdminSession.value = null
+                    _isLoadingAdmin.value = false
+                    onResult(false, result.message)
+                }
+                is AdminOperationResult.Error -> {
+                    _isLoadingAdmin.value = false
+                    onResult(false, result.message)
+                }
+            }
         }
     }
 
