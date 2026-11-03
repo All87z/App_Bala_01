@@ -188,9 +188,9 @@ dependencies {
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
-        android:icon="@android:drawable/sym_def_app_icon"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@android:drawable/sym_def_app_icon"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.AssistenteDeBalanca">
         <activity
@@ -251,7 +251,7 @@ dependencies {
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#0F172A"
+        android:fillColor="#FFFFFF"
         android:pathData="M0,0h108v108h-108z"/>
 </vector>
 `,
