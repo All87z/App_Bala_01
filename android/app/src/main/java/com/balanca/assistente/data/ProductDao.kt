@@ -33,17 +33,4 @@ interface ProductDao {
 
     @Query("SELECT COUNT(*) FROM products")
     suspend fun count(): Int
-
-    // Recentes
-    @Query("SELECT * FROM recent_products ORDER BY accessedAt DESC LIMIT 10")
-    fun getRecentProducts(): Flow<List<RecentProduct>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertRecent(recent: RecentProduct)
-
-    @Query("DELETE FROM recent_products WHERE code = :code")
-    suspend fun deleteRecentByCode(code: String)
-
-    @Query("DELETE FROM recent_products")
-    suspend fun clearRecents()
 }

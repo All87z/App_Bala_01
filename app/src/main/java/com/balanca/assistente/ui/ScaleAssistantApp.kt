@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Mic
@@ -65,7 +64,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.balanca.assistente.data.Product
-import com.balanca.assistente.data.RecentProduct
 import com.balanca.assistente.data.OperatorRecord
 import com.balanca.assistente.util.TextNormalizer
 import com.balanca.assistente.ui.theme.*
@@ -79,7 +77,6 @@ fun ScaleAssistantApp(
     val context = LocalContext.current
     val searchQuery by viewModel.searchQuery.collectAsState()
     val products by viewModel.filteredProducts.collectAsState()
-    val recentProducts by viewModel.recentProducts.collectAsState()
     val selectedSpotlight by viewModel.selectedSpotlightProduct.collectAsState()
     val isAddEditDialogOpen by viewModel.isAddEditDialogOpen.collectAsState()
     val productToEdit by viewModel.productToEdit.collectAsState()
@@ -348,45 +345,6 @@ fun ScaleAssistantApp(
                 }
             }
 
-            // Seção de Produtos Recentes
-            if (recentProducts.isNotEmpty() && searchQuery.isBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.History,
-                        contentDescription = "Recentes",
-                        tint = CodeHighlight,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "CONSULTADOS RECENTEMENTE",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = CodeHighlight,
-                            letterSpacing = 1.sp
-                        )
-                    )
-                }
-
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(vertical = 4.dp)
-                ) {
-                    items(recentProducts, key = { it.code }) { recent ->
-                        RecentProductChip(
-                            recent = recent,
-                            onClick = {
-                                viewModel.setSearchQuery(recent.code)
-                            }
-                        )
-                    }
-                }
-            }
-
             Spacer(modifier = Modifier.height(12.dp))
 
             // Lista de Resultados
@@ -558,45 +516,6 @@ fun ProductThumbnail(
     }
 }
 
-/**
- * Chip para produto consultado recentemente
- */
-@Composable
-fun RecentProductChip(
-    recent: RecentProduct,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = SurfaceDark,
-        border = BorderStroke(1.dp, SurfaceVariantDark)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = recent.code,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = PrimaryYellow
-                )
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = TextNormalizer.getDisplayName(recent.name),
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    color = TextLight,
-                    fontWeight = FontWeight.Medium
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
 
 /**
  * Card do produto na lista com CÓDIGO EM NÚMEROS MUITO GRANDES

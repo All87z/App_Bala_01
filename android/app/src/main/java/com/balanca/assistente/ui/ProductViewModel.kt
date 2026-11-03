@@ -17,7 +17,6 @@ import com.balanca.assistente.data.AppDatabase
 import com.balanca.assistente.data.OperatorRecord
 import com.balanca.assistente.data.OperatorSession
 import com.balanca.assistente.data.Product
-import com.balanca.assistente.data.RecentProduct
 import com.balanca.assistente.data.SessionManager
 import com.balanca.assistente.network.AdminLoginResult
 import com.balanca.assistente.network.AdminOperationResult
@@ -65,12 +64,6 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val recentProducts: StateFlow<List<RecentProduct>> = dao.getRecentProducts().stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
-    )
 
     // Modais e Estados de UI
     private val _selectedSpotlightProduct = MutableStateFlow<Product?>(null)
@@ -143,16 +136,6 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
 
     fun openSpotlight(product: Product) {
         _selectedSpotlightProduct.value = product
-        // Salva na lista de recentes automaticamente
-        viewModelScope.launch(Dispatchers.IO) {
-            dao.insertRecent(
-                RecentProduct(
-                    code = product.code,
-                    name = product.name,
-                    accessedAt = System.currentTimeMillis()
-                )
-            )
-        }
     }
 
     fun closeSpotlight() {
@@ -189,7 +172,6 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
         val product = _productToDelete.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
             dao.delete(product)
-            dao.deleteRecentByCode(product.code)
             _productToDelete.value = null
             _statusNotice.value = "Produto \"${product.name}\" excluído com sucesso."
         }

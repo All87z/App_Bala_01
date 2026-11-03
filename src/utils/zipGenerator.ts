@@ -362,22 +362,6 @@ data class Product(
 `,
   },
   {
-    path: 'app/src/main/java/com/balanca/assistente/data/RecentProduct.kt',
-    content: `package com.balanca.assistente.data
-
-import androidx.room.Entity
-import androidx.room.PrimaryKey
-
-@Entity(tableName = "recent_products")
-data class RecentProduct(
-    @PrimaryKey
-    val code: String,
-    val name: String,
-    val accessedAt: Long = System.currentTimeMillis()
-)
-`,
-  },
-  {
     path: 'app/src/main/java/com/balanca/assistente/data/ProductDao.kt',
     content: `package com.balanca.assistente.data
 
@@ -411,15 +395,6 @@ interface ProductDao {
 
     @Delete
     suspend fun delete(product: Product)
-
-    @Query("SELECT * FROM recent_products ORDER BY accessedAt DESC LIMIT 10")
-    fun getRecentProducts(): Flow<List<RecentProduct>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertRecent(recent: RecentProduct)
-
-    @Query("DELETE FROM recent_products WHERE code = :code")
-    suspend fun deleteRecentByCode(code: String)
 }
 `,
   },
@@ -438,7 +413,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Database(
-    entities = [Product::class, RecentProduct::class],
+    entities = [Product::class],
     version = 1,
     exportSchema = false
 )

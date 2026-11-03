@@ -9,8 +9,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
 
 @Database(
-    entities = [Product::class, RecentProduct::class],
-    version = 2,
+    entities = [Product::class],
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -27,6 +27,12 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("DROP TABLE IF EXISTS recent_products")
+            }
+        }
+
         fun getDatabase(context: Context, scope: CoroutineScope? = null): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -34,7 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "balanca_database.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
