@@ -35,4 +35,17 @@ export interface SheetsProductItem {
   disponibilidade?: boolean;
 }
 
+export interface AdminSession {
+  token: string;
+  matricula: string;
+  expiresAt: number;
+}
+
+export interface OperatorRecord {
+  matricula: string;
+  nome: string;
+  status: 'ATIVO' | 'INATIVO';
+  criadoEm?: string;
+}
+
 

@@ -1,7 +1,14 @@
-import { OperatorSession, SheetsProductItem, Product } from '../types';
+import {
+  OperatorSession,
+  SheetsProductItem,
+  Product,
+  AdminSession,
+  OperatorRecord,
+} from '../types';
 import { getLocalAvailabilityMap } from './storage';
 
 const SESSION_STORAGE_KEY = 'balanca_operator_session';
+const ADMIN_SESSION_STORAGE_KEY = 'balanca_admin_session';
 const API_URL_STORAGE_KEY = 'balanca_sheets_api_url';
 export const DEFAULT_SHEETS_API_URL =
   'https://script.google.com/macros/s/AKfycbyfaojZh81dEvfsWQcmqBM28yxPq3X3tk92IDPhCINHb7E0iayjNZxNagWwyzs4ttry/exec';
@@ -36,6 +43,53 @@ export function saveStoredSession(session: OperatorSession) {
 
 export function clearStoredSession() {
   localStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
+export function getStoredAdminSession(): AdminSession | null {
+  try {
+    const raw = localStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const session: AdminSession = JSON.parse(raw);
+    if (session.expiresAt && Date.now() > session.expiresAt) {
+      clearStoredAdminSession();
+      return null;
+    }
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+export function saveStoredAdminSession(session: AdminSession) {
+  localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+
+export function clearStoredAdminSession() {
+  localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+}
+
+/**
+ * Detecta o modelo ou tipo do dispositivo/navegador atual
+ */
+export function getDeviceModelString(): string {
+  try {
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    if (/Android/i.test(ua)) {
+      const match = ua.match(/Android\s+[\d.]+;\s*([^;)]+)\)/i);
+      if (match && match[1]) {
+        return `Android: ${match[1].trim()}`;
+      }
+      return 'Dispositivo Android';
+    }
+    if (/iPhone/i.test(ua)) return 'Apple iPhone';
+    if (/iPad/i.test(ua)) return 'Apple iPad';
+    if (/Windows/i.test(ua)) return 'PC Windows';
+    if (/Macintosh/i.test(ua)) return 'Mac OS';
+    if (/Linux/i.test(ua)) return 'Linux';
+    return 'Navegador Web';
+  } catch {
+    return 'Dispositivo Comercial';
+  }
 }
 
 /**
@@ -123,6 +177,7 @@ export async function loginOperator(
       action: 'login',
       matricula: matricula.trim(),
       senha: senha,
+      aparelho: getDeviceModelString(),
     });
 
     if (data.sucesso && data.token) {
@@ -361,5 +416,285 @@ async function fetchDriveImageBase64(
     return null;
   } catch {
     return null;
+  }
+}
+
+// =========================================================================
+// MÉTODOS EXCLUSIVOS DA ÁREA ADMINISTRATIVA
+// =========================================================================
+
+/**
+ * Autentica o administrador com matrícula e senha administrativa exclusiva
+ */
+export async function loginAdmin(
+  apiUrl: string,
+  matricula: string,
+  senha: string
+): Promise<{ sucesso: boolean; sessao?: AdminSession; mensagem?: string }> {
+  try {
+    const cleanUrl = sanitizeApiUrl(apiUrl);
+    const data = await postToAppsScript(cleanUrl, {
+      action: 'admin_login',
+      matricula: matricula.trim(),
+      senha,
+      aparelho: getDeviceModelString(),
+    });
+
+    if (data.sucesso && data.adminToken) {
+      const sessao: AdminSession = {
+        token: data.adminToken,
+        matricula: data.matricula || matricula.trim().toUpperCase(),
+        expiresAt: data.expiresAt || Date.now() + 8 * 60 * 60 * 1000,
+      };
+      saveStoredAdminSession(sessao);
+      return { sucesso: true, sessao };
+    }
+
+    return {
+      sucesso: false,
+      mensagem: data.erro || 'Credenciais administrativas inválidas.',
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      sucesso: false,
+      mensagem: `Falha ao conectar com servidor administrativo: ${message}`,
+    };
+  }
+}
+
+/**
+ * Encerra a sessão administrativa
+ */
+export async function logoutAdmin(apiUrl: string, adminToken: string): Promise<void> {
+  try {
+    const cleanUrl = sanitizeApiUrl(apiUrl);
+    await postToAppsScript(cleanUrl, {
+      action: 'admin_logout',
+      adminToken,
+    });
+  } catch {
+    // Ignora erros de rede no logout
+  } finally {
+    clearStoredAdminSession();
+  }
+}
+
+/**
+ * Lista até 10 operadores cadastrados na aba Operadores
+ */
+export async function listOperatorsAdmin(
+  apiUrl: string,
+  adminToken: string
+): Promise<{
+  sucesso: boolean;
+  operadores?: OperatorRecord[];
+  total?: number;
+  limite?: number;
+  mensagem?: string;
+  sessaoExpirada?: boolean;
+}> {
+  try {
+    const cleanUrl = sanitizeApiUrl(apiUrl);
+    const data = await postToAppsScript(cleanUrl, {
+      action: 'admin_listar_operadores',
+      adminToken,
+    });
+
+    if (data.sucesso) {
+      return {
+        sucesso: true,
+        operadores: data.operadores || [],
+        total: data.total ?? (data.operadores?.length || 0),
+        limite: data.limiteMaximo || 10,
+      };
+    }
+
+    if (data.sessaoExpirada) {
+      clearStoredAdminSession();
+    }
+
+    return {
+      sucesso: false,
+      mensagem: data.erro || 'Falha ao listar operadores.',
+      sessaoExpirada: data.sessaoExpirada,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      sucesso: false,
+      mensagem: `Erro ao obter operadores: ${message}`,
+    };
+  }
+}
+
+/**
+ * Cadastra antecipadamente um novo operador na aba Operadores
+ */
+export async function registerOperatorAdmin(
+  apiUrl: string,
+  adminToken: string,
+  dados: { matricula: string; nome: string; senha: string }
+): Promise<{ sucesso: boolean; mensagem: string; sessaoExpirada?: boolean }> {
+  try {
+    const cleanUrl = sanitizeApiUrl(apiUrl);
+    const data = await postToAppsScript(cleanUrl, {
+      action: 'admin_cadastrar_operador',
+      adminToken,
+      matricula: dados.matricula.trim(),
+      nome: dados.nome.trim(),
+      senha: dados.senha,
+    });
+
+    if (data.sucesso) {
+      return {
+        sucesso: true,
+        mensagem: data.mensagem || 'Operador cadastrado com sucesso!',
+      };
+    }
+
+    if (data.sessaoExpirada) {
+      clearStoredAdminSession();
+    }
+
+    return {
+      sucesso: false,
+      mensagem: data.erro || 'Falha ao cadastrar operador.',
+      sessaoExpirada: data.sessaoExpirada,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      sucesso: false,
+      mensagem: `Erro na requisição: ${message}`,
+    };
+  }
+}
+
+/**
+ * Edita nome, senha ou status de um operador
+ */
+export async function updateOperatorAdmin(
+  apiUrl: string,
+  adminToken: string,
+  dados: { matricula: string; nome: string; novaSenha?: string; status?: 'ATIVO' | 'INATIVO' }
+): Promise<{ sucesso: boolean; mensagem: string; sessaoExpirada?: boolean }> {
+  try {
+    const cleanUrl = sanitizeApiUrl(apiUrl);
+    const data = await postToAppsScript(cleanUrl, {
+      action: 'admin_editar_operador',
+      adminToken,
+      matricula: dados.matricula.trim(),
+      novoNome: dados.nome.trim(),
+      novaSenha: dados.novaSenha || undefined,
+      status: dados.status || undefined,
+    });
+
+    if (data.sucesso) {
+      return {
+        sucesso: true,
+        mensagem: data.mensagem || 'Operador atualizado com sucesso!',
+      };
+    }
+
+    if (data.sessaoExpirada) {
+      clearStoredAdminSession();
+    }
+
+    return {
+      sucesso: false,
+      mensagem: data.erro || 'Falha ao atualizar operador.',
+      sessaoExpirada: data.sessaoExpirada,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      sucesso: false,
+      mensagem: `Erro na requisição: ${message}`,
+    };
+  }
+}
+
+/**
+ * Ativa ou desativa um operador
+ */
+export async function toggleOperatorStatusAdmin(
+  apiUrl: string,
+  adminToken: string,
+  matricula: string,
+  status: 'ATIVO' | 'INATIVO'
+): Promise<{ sucesso: boolean; mensagem: string; sessaoExpirada?: boolean }> {
+  try {
+    const cleanUrl = sanitizeApiUrl(apiUrl);
+    const data = await postToAppsScript(cleanUrl, {
+      action: 'admin_alternar_status',
+      adminToken,
+      matricula: matricula.trim(),
+      status,
+    });
+
+    if (data.sucesso) {
+      return {
+        sucesso: true,
+        mensagem: data.mensagem || `Operador marcado como ${status}.`,
+      };
+    }
+
+    if (data.sessaoExpirada) {
+      clearStoredAdminSession();
+    }
+
+    return {
+      sucesso: false,
+      mensagem: data.erro || 'Falha ao alternar status do operador.',
+      sessaoExpirada: data.sessaoExpirada,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      sucesso: false,
+      mensagem: `Erro ao alternar status: ${message}`,
+    };
+  }
+}
+
+/**
+ * Altera a senha da conta de Administrador
+ */
+export async function changeAdminPassword(
+  apiUrl: string,
+  adminToken: string,
+  novaSenha: string
+): Promise<{ sucesso: boolean; mensagem: string; sessaoExpirada?: boolean }> {
+  try {
+    const cleanUrl = sanitizeApiUrl(apiUrl);
+    const data = await postToAppsScript(cleanUrl, {
+      action: 'admin_alterar_senha_propria',
+      adminToken,
+      novaSenha,
+    });
+
+    if (data.sucesso) {
+      return {
+        sucesso: true,
+        mensagem: data.mensagem || 'Senha administrativa alterada com sucesso!',
+      };
+    }
+
+    if (data.sessaoExpirada) {
+      clearStoredAdminSession();
+    }
+
+    return {
+      sucesso: false,
+      mensagem: data.erro || 'Falha ao alterar senha de administrador.',
+      sessaoExpirada: data.sessaoExpirada,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      sucesso: false,
+      mensagem: `Erro ao alterar senha: ${message}`,
+    };
   }
 }

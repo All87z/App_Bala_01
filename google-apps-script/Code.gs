@@ -35,11 +35,15 @@ var CONFIG = {
   ABA_SESSOES: 'Sessoes',
 
   // Parâmetros de segurança e criptografia
-  DURACAO_SESSAO_DIAS: 30,         // Validade do token de sessão (dias)
+  DURACAO_SESSAO_DIAS: 30,         // Validade do token de sessão de operadores (dias)
+  DURACAO_SESSAO_ADMIN_HORAS: 8,   // Validade do token de administrador (horas)
   ITERACOES_PBKDF2: 10000,         // Rodadas padrão PBKDF2-HMAC-SHA-256 (RFC 2898)
   TAMANHO_MINIMO_SENHA: 12,        // Tamanho mínimo obrigatório de senha (sem trim)
   MAX_TENTATIVAS_FALHAS_LOGIN: 5,  // Máximo de erros antes do bloqueio por matrícula
   TEMPO_BLOQUEIO_SEGUNDOS: 900,    // 15 minutos de bloqueio temporário
+  LIMITE_MAXIMO_OPERADORES: 10,    // Limite de até 10 operadores para cadastro antecipado
+  ADMIN_MATRICULA_PADRAO: 'ADMIN', // Matrícula padrão inicial do administrador
+  ADMIN_SENHA_INICIAL: 'Admin@Balanca2026!', // Senha inicial provisória do admin (alterável a qualquer momento)
 };
 
 /**
@@ -71,7 +75,7 @@ function processarRequisicao(e, metodoHttp) {
         var firstEq = qsPairs[qi].indexOf('=');
         var rawKey = firstEq !== -1 ? qsPairs[qi].substring(0, firstEq) : qsPairs[qi];
         var qKey = decodeURIComponent(rawKey.replace(/\+/g, ' ')).trim().toLowerCase();
-        if (qKey === 'token' || qKey === 'senha' || qKey === 'matricula') {
+        if (qKey === 'token' || qKey === 'senha' || qKey === 'matricula' || qKey === 'admintoken') {
           return responderJSON({
             sucesso: false,
             erro: 'Violação de segurança: credenciais e tokens não podem trafegar na URL (query string). Envie-os exclusivamente no corpo da requisição POST.'
@@ -84,7 +88,7 @@ function processarRequisicao(e, metodoHttp) {
     if (metodoHttp !== 'POST') {
       return responderJSON({
         sucesso: false,
-        erro: 'Método não permitido: todas as operações protegidas (login, logout, sincronizar, imagem) exigem requisição HTTP POST.'
+        erro: 'Método não permitido: todas as operações protegidas (login, logout, sincronizar, imagem, admin) exigem requisição HTTP POST.'
       });
     }
 
@@ -101,7 +105,7 @@ function processarRequisicao(e, metodoHttp) {
 
     // Rota 1: Login de Operador (Matrícula + Senha)
     if (action === 'login') {
-      return rotaLogin(bodyParams.matricula, bodyParams.senha);
+      return rotaLogin(bodyParams.matricula, bodyParams.senha, bodyParams.aparelho);
     }
 
     // Rota 2: Logout / Encerramento de Sessão
@@ -125,6 +129,63 @@ function processarRequisicao(e, metodoHttp) {
         sucesso: true,
         diagnostico: diagnosticarAbaOperadores()
       });
+    }
+
+    // =========================================================================
+    // ROTAS EXCLUSIVAS DA ÁREA DO ADMINISTRADOR
+    // =========================================================================
+
+    // Rota Admin 1: Login do Administrador
+    if (action === 'admin_login') {
+      return rotaAdminLogin(bodyParams.matricula, bodyParams.senha, bodyParams.aparelho);
+    }
+
+    // Rota Admin 2: Logout do Administrador
+    if (action === 'admin_logout') {
+      return rotaAdminLogout(bodyParams.adminToken || bodyParams.token);
+    }
+
+    // Rota Admin 3: Listar Operadores Cadastrados (Até 10)
+    if (action === 'admin_listar_operadores') {
+      return rotaAdminListarOperadores(bodyParams.adminToken || bodyParams.token);
+    }
+
+    // Rota Admin 4: Cadastrar Novo Operador Antecipado (Até 10)
+    if (action === 'admin_cadastrar_operador') {
+      return rotaAdminCadastrarOperador(
+        bodyParams.adminToken || bodyParams.token,
+        bodyParams.matricula,
+        bodyParams.nome,
+        bodyParams.senha
+      );
+    }
+
+    // Rota Admin 5: Editar Operador (Nome, Senha, Status)
+    if (action === 'admin_editar_operador') {
+      return rotaAdminEditarOperador(
+        bodyParams.adminToken || bodyParams.token,
+        bodyParams.matricula,
+        bodyParams.novoNome || bodyParams.nome,
+        bodyParams.novaSenha || bodyParams.senha,
+        bodyParams.status
+      );
+    }
+
+    // Rota Admin 6: Alternar Status do Operador (ATIVO / INATIVO)
+    if (action === 'admin_alternar_status') {
+      return rotaAdminAlternarStatus(
+        bodyParams.adminToken || bodyParams.token,
+        bodyParams.matricula,
+        bodyParams.status
+      );
+    }
+
+    // Rota Admin 7: Alterar a Senha da Conta Administrador
+    if (action === 'admin_alterar_senha_propria') {
+      return rotaAdminAlterarSenhaPropria(
+        bodyParams.adminToken || bodyParams.token,
+        bodyParams.novaSenha || bodyParams.senha
+      );
     }
 
     return responderJSON({
@@ -385,7 +446,7 @@ function mapearColunasOperadores(linha) {
 // =========================================================================
 // ROTA 1: LOGIN DO OPERADOR
 // =========================================================================
-function rotaLogin(matricula, senha) {
+function rotaLogin(matricula, senha, aparelho) {
   var diag = {
     planilhaEncontrada: false,
     abaOperadoresEncontrada: false,
@@ -424,6 +485,19 @@ function rotaLogin(matricula, senha) {
   var matLimpa = String(matricula).replace(/\u00A0/g, ' ').trim().toUpperCase();
   var matAlnum = matLimpa.replace(/[^A-Z0-9]/g, '');
   var matInt = /^\d+$/.test(matAlnum) ? parseInt(matAlnum, 10) : null;
+
+  // Regra 8: Bloqueio estrito de uso de credenciais de Administrador no login de operadores
+  try {
+    var adminCreds = obterCredenciaisAdmin();
+    if (adminCreds && adminCreds.matricula && matLimpa === adminCreds.matricula.toUpperCase()) {
+      diag.etapaFalha = 'MATRICULA_ADMINISTRATIVA';
+      return responderJSON({
+        sucesso: false,
+        erro: 'Esta é uma matrícula administrativa. Para gerenciar operadores, acesse a área administrativa exclusiva.',
+        diagnostico: diag
+      });
+    }
+  } catch (eAdm) {}
 
   // Verifica proteção contra ataques de força bruta para esta matrícula específica
   var statusBloqueio = verificarBloqueioTentativas(matLimpa);
@@ -626,7 +700,7 @@ function rotaLogin(matricula, senha) {
   var agora = new Date();
   var expiresAt = new Date(agora.getTime() + (CONFIG.DURACAO_SESSAO_DIAS * 24 * 60 * 60 * 1000));
 
-  salvarSessao(token, operadorEncontrado.matricula, operadorEncontrado.nome, expiresAt);
+  salvarSessao(token, operadorEncontrado.matricula, operadorEncontrado.nome, expiresAt, aparelho);
 
   diag.etapaFalha = null;
 
@@ -1033,14 +1107,23 @@ function validarSessao(token) {
 }
 
 /**
- * Salva a nova sessão na aba Sessoes e limpa sessões expiradas antigas
+ * Salva a nova sessão na aba Sessoes com modelo do Aparelho e limpa sessões expiradas antigas
  */
-function salvarSessao(token, matricula, nome, expiresAt) {
+function salvarSessao(token, matricula, nome, expiresAt, aparelho) {
   var ss = obterPlanilha();
   var abaSessoes = ss.getSheetByName(CONFIG.ABA_SESSOES);
   if (!abaSessoes) {
     abaSessoes = ss.insertSheet(CONFIG.ABA_SESSOES);
-    abaSessoes.appendRow(['Token', 'Matricula', 'Nome', 'ExpiraEm', 'CriadoEm']);
+    abaSessoes.appendRow(['Token', 'Matricula', 'Nome', 'ExpiraEm', 'CriadoEm', 'Aparelho']);
+    abaSessoes.getRange(1, 1, 1, 6).setFontWeight('bold').setBackground('#0f172a').setFontColor('#38bdf8');
+  } else {
+    try {
+      var lastCol = Math.max(abaSessoes.getLastColumn(), 6);
+      var cabecalhos = abaSessoes.getRange(1, 1, 1, lastCol).getValues()[0];
+      if (!cabecalhos[5] || String(cabecalhos[5]).trim() === '') {
+        abaSessoes.getRange(1, 6).setValue('Aparelho').setFontWeight('bold').setBackground('#0f172a').setFontColor('#38bdf8');
+      }
+    } catch (eH) {}
   }
 
   try {
@@ -1054,7 +1137,7 @@ function salvarSessao(token, matricula, nome, expiresAt) {
     }
   } catch (eLimpeza) {}
 
-  abaSessoes.appendRow([token, matricula, nome, expiresAt, new Date()]);
+  abaSessoes.appendRow([token, matricula, nome, expiresAt, new Date(), aparelho || 'Dispositivo']);
 }
 
 // =========================================================================
@@ -1460,11 +1543,12 @@ function onOpen() {
     var ui = SpreadsheetApp.getUi();
     ui.createMenu('Assistente de Balança')
       .addItem('1. Inicializar Abas do Sistema', 'inicializarSistema')
-      .addItem('2. Cadastrar Novo Operador (Seguro)', 'cadastrarOperadorViaPrompt')
-      .addItem('3. Redefinir Senha de Operador (Seguro)', 'redefinirSenhaOperadorViaPrompt')
-      .addItem('4. Desativar Operador', 'desativarOperadorViaPrompt')
+      .addItem('2. Configurar Senha do Administrador (Seguro)', 'configurarAdminViaPrompt')
+      .addItem('3. Cadastrar Novo Operador (Seguro)', 'cadastrarOperadorViaPrompt')
+      .addItem('4. Redefinir Senha de Operador (Seguro)', 'redefinirSenhaOperadorViaPrompt')
+      .addItem('5. Desativar Operador', 'desativarOperadorViaPrompt')
       .addSeparator()
-      .addItem('5. Diagnóstico Seguro da Aba Operadores', 'diagnosticarAbaOperadoresViaPrompt')
+      .addItem('6. Diagnóstico Seguro da Aba Operadores', 'diagnosticarAbaOperadoresViaPrompt')
       .addToUi();
   } catch (e) {}
 }
@@ -1704,3 +1788,514 @@ function diagnosticarAbaOperadoresViaPrompt() {
 
   ui.alert('Diagnóstico Seguro da Planilha', msg, ui.ButtonSet.OK);
 }
+
+// =========================================================================
+// GESTÃO ADMINISTRATIVA E CONTROLE DE ATÉ 10 OPERADORES
+// =========================================================================
+
+/**
+ * Obtém as credenciais do Administrador armazenadas de forma segura em ScriptProperties.
+ * Se ainda não estiverem configuradas, auto-inicializa a credencial padrão inicial.
+ */
+function obterCredenciaisAdmin() {
+  var props = PropertiesService.getScriptProperties();
+  var matricula = props.getProperty('ADMIN_MATRICULA');
+  var hash = props.getProperty('ADMIN_HASH');
+  var salt = props.getProperty('ADMIN_SALT');
+
+  // Se não existir, inicializa de forma segura com hash PBKDF2
+  if (!matricula || !hash || !salt) {
+    matricula = CONFIG.ADMIN_MATRICULA_PADRAO || 'ADMIN';
+    salt = gerarSaltHex256Bits();
+    hash = pbkdf2HmacSha256(CONFIG.ADMIN_SENHA_INICIAL || 'Admin@Balanca2026!', salt, CONFIG.ITERACOES_PBKDF2);
+    props.setProperties({
+      'ADMIN_MATRICULA': matricula,
+      'ADMIN_HASH': hash,
+      'ADMIN_SALT': salt,
+      'ADMIN_CRIADO_EM': String(new Date().getTime())
+    });
+    Logger.log('[ADMIN] Credencial administrativa inicial configurada com sucesso. Matrícula: ' + matricula);
+  }
+
+  return {
+    matricula: matricula,
+    hash: hash,
+    salt: salt
+  };
+}
+
+/**
+ * Configura ou redefine a matrícula e senha do Administrador em ScriptProperties
+ */
+function configurarAdmin(matricula, novaSenha) {
+  if (!matricula || String(matricula).trim() === '') {
+    throw new Error('A matrícula administrativa não pode ser vazia.');
+  }
+  if (!novaSenha || String(novaSenha).length < CONFIG.TAMANHO_MINIMO_SENHA) {
+    throw new Error('A senha administrativa deve conter no mínimo ' + CONFIG.TAMANHO_MINIMO_SENHA + ' caracteres.');
+  }
+
+  var matLimpa = String(matricula).trim().toUpperCase();
+  var salt = gerarSaltHex256Bits();
+  var hash = pbkdf2HmacSha256(novaSenha, salt, CONFIG.ITERACOES_PBKDF2);
+
+  var props = PropertiesService.getScriptProperties();
+  props.setProperties({
+    'ADMIN_MATRICULA': matLimpa,
+    'ADMIN_HASH': hash,
+    'ADMIN_SALT': salt,
+    'ADMIN_ATUALIZADO_EM': String(new Date().getTime())
+  });
+
+  Logger.log('[ADMIN] Credenciais administrativas atualizadas para: ' + matLimpa);
+  return { sucesso: true, matricula: matLimpa };
+}
+
+/**
+ * Valida o token de sessão administrativa
+ */
+function validarSessaoAdmin(adminToken) {
+  if (!adminToken || String(adminToken).trim() === '') {
+    return { valido: false, motivo: 'Token de administrador não fornecido.' };
+  }
+
+  var cleanToken = String(adminToken).trim();
+
+  // 1. Verificação rápida em CacheService
+  try {
+    var cache = CacheService.getScriptCache();
+    var cached = cache.get('adm_' + cleanToken);
+    if (cached) {
+      var data = JSON.parse(cached);
+      if (data && data.expiresAt && new Date().getTime() < data.expiresAt) {
+        return { valido: true, admin: data };
+      }
+    }
+  } catch (eCache) {}
+
+  // 2. Verificação de fallback na aba Sessoes
+  try {
+    var ss = obterPlanilha();
+    var abaSess = ss.getSheetByName(CONFIG.ABA_SESSOES);
+    if (abaSess) {
+      var dados = abaSess.getDataRange().getValues();
+      var agora = new Date().getTime();
+      var adminCreds = obterCredenciaisAdmin();
+      var adminMatUpper = adminCreds.matricula.toUpperCase();
+
+      for (var i = 1; i < dados.length; i++) {
+        if (String(dados[i][0]).trim() === cleanToken) {
+          var mat = String(dados[i][1]).trim().toUpperCase();
+          if (mat === adminMatUpper) {
+            var exp = new Date(dados[i][3]).getTime();
+            if (agora < exp) {
+              return {
+                valido: true,
+                admin: { matricula: mat, expiresAt: exp }
+              };
+            }
+          }
+          break;
+        }
+      }
+    }
+  } catch (eSess) {}
+
+  return { valido: false, motivo: 'Sessão administrativa expirada ou inválida. Faça login novamente.' };
+}
+
+/**
+ * ROTA ADMIN 1: Login de Administrador
+ */
+function rotaAdminLogin(matricula, senha, aparelho) {
+  if (!matricula || String(matricula).trim() === '') {
+    return responderJSON({ sucesso: false, erro: 'Informe a matrícula de administrador.' });
+  }
+  if (!senha || String(senha).length === 0) {
+    return responderJSON({ sucesso: false, erro: 'Informe a senha de administrador.' });
+  }
+
+  var matLimpa = String(matricula).trim().toUpperCase();
+  var adminCreds = obterCredenciaisAdmin();
+
+  // Comparação de matrícula administrativa
+  if (matLimpa !== adminCreds.matricula.toUpperCase()) {
+    registrarTentativaFalha('ADM_' + matLimpa);
+    return responderJSON({ sucesso: false, erro: 'Credenciais administrativas inválidas.' });
+  }
+
+  // Validação estrita de senha com PBKDF2-HMAC-SHA-256
+  var senhaValida = validarSenhaOperador(senha, adminCreds.hash, adminCreds.salt);
+  if (!senhaValida) {
+    registrarTentativaFalha('ADM_' + matLimpa);
+    return responderJSON({ sucesso: false, erro: 'Credenciais administrativas inválidas.' });
+  }
+
+  limparTentativasFalhas('ADM_' + matLimpa);
+
+  // Gera token administrativo exclusivo com prefixo 'ADMIN-'
+  var adminToken = 'ADMIN-' + Utilities.getUuid() + '-' + Utilities.getUuid();
+  var duracaoMs = (CONFIG.DURACAO_SESSAO_ADMIN_HORAS || 8) * 60 * 60 * 1000;
+  var expiresAt = new Date(new Date().getTime() + duracaoMs);
+
+  // Armazena no cache por até 6 horas (limite máximo do CacheService é 21600s)
+  try {
+    var cache = CacheService.getScriptCache();
+    cache.put('adm_' + adminToken, JSON.stringify({
+      matricula: adminCreds.matricula,
+      expiresAt: expiresAt.getTime()
+    }), Math.min(21600, Math.floor(duracaoMs / 1000)));
+  } catch (eC) {}
+
+  // Registra sessão na aba Sessoes com Aparelho
+  salvarSessao(adminToken, adminCreds.matricula, 'Administrador do Sistema', expiresAt, aparelho || 'Painel Administrativo');
+
+  return responderJSON({
+    sucesso: true,
+    adminToken: adminToken,
+    matricula: adminCreds.matricula,
+    expiresAt: expiresAt.getTime(),
+    mensagem: 'Autenticação administrativa realizada com sucesso.'
+  });
+}
+
+/**
+ * ROTA ADMIN 2: Logout de Administrador
+ */
+function rotaAdminLogout(adminToken) {
+  if (adminToken) {
+    try {
+      CacheService.getScriptCache().remove('adm_' + String(adminToken).trim());
+    } catch (e) {}
+    rotaLogout(adminToken);
+  }
+  return responderJSON({ sucesso: true, mensagem: 'Sessão administrativa encerrada.' });
+}
+
+/**
+ * ROTA ADMIN 3: Listar Operadores Cadastrados (Até 10)
+ */
+function rotaAdminListarOperadores(adminToken) {
+  var auth = validarSessaoAdmin(adminToken);
+  if (!auth.valido) {
+    return responderJSON({ sucesso: false, sessaoExpirada: true, erro: auth.motivo });
+  }
+
+  var ss = obterPlanilha();
+  var abaOp = ss.getSheetByName(CONFIG.ABA_OPERADORES);
+  if (!abaOp) {
+    inicializarSistema();
+    abaOp = ss.getSheetByName(CONFIG.ABA_OPERADORES);
+  }
+
+  var dados = abaOp.getDataRange().getValues();
+  if (dados.length <= 1) {
+    return responderJSON({
+      sucesso: true,
+      operadores: [],
+      total: 0,
+      limiteMaximo: CONFIG.LIMITE_MAXIMO_OPERADORES || 10
+    });
+  }
+
+  var colMap = mapearColunasOperadores(dados[0]);
+  var lista = [];
+
+  for (var i = 1; i < dados.length; i++) {
+    var rawMat = dados[i][colMap.idxMatricula];
+    if (rawMat == null || String(rawMat).trim() === '') continue;
+
+    var rawNome = colMap.idxNome !== -1 && dados[i][colMap.idxNome] != null ? dados[i][colMap.idxNome] : '';
+    var rawStatus = colMap.idxStatus !== -1 && dados[i][colMap.idxStatus] != null ? dados[i][colMap.idxStatus] : 'ATIVO';
+    var rawCriadoEm = dados[i].length > 5 && dados[i][5] != null ? dados[i][5] : '';
+
+    var statusLimpo = String(rawStatus).trim().toUpperCase();
+    var statusInativos = ['INATIVO', 'DESATIVADO', 'BLOQUEADO', 'FALSE', '0', 'NAO', 'NÃO'];
+    var statusFormatado = statusInativos.indexOf(statusLimpo) === -1 ? 'ATIVO' : 'INATIVO';
+
+    lista.push({
+      matricula: String(rawMat).trim(),
+      nome: String(rawNome).trim() || 'Operador',
+      status: statusFormatado,
+      criadoEm: rawCriadoEm ? String(rawCriadoEm) : undefined
+    });
+  }
+
+  return responderJSON({
+    sucesso: true,
+    operadores: lista,
+    total: lista.length,
+    limiteMaximo: CONFIG.LIMITE_MAXIMO_OPERADORES || 10
+  });
+}
+
+/**
+ * ROTA ADMIN 4: Cadastrar Novo Operador Antecipado (Até 10)
+ */
+function rotaAdminCadastrarOperador(adminToken, matricula, nome, senha) {
+  var auth = validarSessaoAdmin(adminToken);
+  if (!auth.valido) {
+    return responderJSON({ sucesso: false, sessaoExpirada: true, erro: auth.motivo });
+  }
+
+  if (!matricula || String(matricula).trim() === '') {
+    return responderJSON({ sucesso: false, erro: 'A matrícula do operador é obrigatória.' });
+  }
+  if (!nome || String(nome).trim() === '') {
+    return responderJSON({ sucesso: false, erro: 'O nome do operador é obrigatório.' });
+  }
+  if (!senha || String(senha).length < CONFIG.TAMANHO_MINIMO_SENHA) {
+    return responderJSON({
+      sucesso: false,
+      erro: 'A senha do operador deve conter no mínimo ' + CONFIG.TAMANHO_MINIMO_SENHA + ' caracteres (sem espaços omitidos).'
+    });
+  }
+
+  var matLimpa = String(matricula).trim().toUpperCase();
+  var nomeLimpo = String(nome).trim();
+
+  // Impede cadastro de operador com a mesma matrícula do admin
+  var adminCreds = obterCredenciaisAdmin();
+  if (matLimpa === adminCreds.matricula.toUpperCase()) {
+    return responderJSON({
+      sucesso: false,
+      erro: 'Esta matrícula está reservada para a administração. Escolha outra matrícula para o operador.'
+    });
+  }
+
+  var ss = obterPlanilha();
+  var abaOp = ss.getSheetByName(CONFIG.ABA_OPERADORES);
+  if (!abaOp) {
+    inicializarSistema();
+    abaOp = ss.getSheetByName(CONFIG.ABA_OPERADORES);
+  }
+
+  var dados = abaOp.getDataRange().getValues();
+  var colMap = mapearColunasOperadores(dados[0]);
+
+  // Conta operadores existentes e verifica duplicidade
+  var totalExistentes = 0;
+  for (var i = 1; i < dados.length; i++) {
+    var rawMat = dados[i][colMap.idxMatricula];
+    if (rawMat != null && String(rawMat).trim() !== '') {
+      totalExistentes++;
+      if (String(rawMat).trim().toUpperCase() === matLimpa) {
+        return responderJSON({
+          sucesso: false,
+          erro: 'A matrícula ' + matLimpa + ' já está cadastrada. Use a opção de editar operador para atualizar nome ou senha.'
+        });
+      }
+    }
+  }
+
+  // Valida o limite de até 10 operadores
+  var limite = CONFIG.LIMITE_MAXIMO_OPERADORES || 10;
+  if (totalExistentes >= limite) {
+    return responderJSON({
+      sucesso: false,
+      erro: 'Limite máximo de ' + limite + ' operadores atingido. Edite ou desative um operador existente para prosseguir.'
+    });
+  }
+
+  // Gera Salt individual de 256 bits e Hash PBKDF2-HMAC-SHA-256
+  var saltHex = gerarSaltHex256Bits();
+  var hash = pbkdf2HmacSha256(senha, saltHex, CONFIG.ITERACOES_PBKDF2);
+
+  abaOp.appendRow([matLimpa, nomeLimpo, hash, saltHex, 'ATIVO', new Date()]);
+
+  return responderJSON({
+    sucesso: true,
+    mensagem: 'Operador ' + matLimpa + ' (' + nomeLimpo + ') cadastrado com sucesso!',
+    matricula: matLimpa,
+    totalCadastrados: totalExistentes + 1
+  });
+}
+
+/**
+ * ROTA ADMIN 5: Editar Operador (Nome, Senha, Status)
+ */
+function rotaAdminEditarOperador(adminToken, matricula, novoNome, novaSenha, status) {
+  var auth = validarSessaoAdmin(adminToken);
+  if (!auth.valido) {
+    return responderJSON({ sucesso: false, sessaoExpirada: true, erro: auth.motivo });
+  }
+
+  if (!matricula || String(matricula).trim() === '') {
+    return responderJSON({ sucesso: false, erro: 'A matrícula é obrigatória.' });
+  }
+
+  var matLimpa = String(matricula).trim().toUpperCase();
+  var ss = obterPlanilha();
+  var abaOp = ss.getSheetByName(CONFIG.ABA_OPERADORES);
+  if (!abaOp) return responderJSON({ sucesso: false, erro: 'Aba Operadores não encontrada.' });
+
+  var dados = abaOp.getDataRange().getValues();
+  var colMap = mapearColunasOperadores(dados[0]);
+  var linha = -1;
+
+  for (var i = 1; i < dados.length; i++) {
+    var rawMat = dados[i][colMap.idxMatricula];
+    if (rawMat != null && String(rawMat).trim().toUpperCase() === matLimpa) {
+      linha = i + 1;
+      break;
+    }
+  }
+
+  if (linha === -1) {
+    return responderJSON({ sucesso: false, erro: 'Operador com matrícula ' + matLimpa + ' não encontrado.' });
+  }
+
+  // Atualiza Nome se fornecido
+  if (novoNome && String(novoNome).trim() !== '' && colMap.idxNome !== -1) {
+    abaOp.getRange(linha, colMap.idxNome + 1).setValue(String(novoNome).trim());
+  }
+
+  // Atualiza Status se fornecido
+  if (status && colMap.idxStatus !== -1) {
+    var statusFormatado = String(status).trim().toUpperCase() === 'INATIVO' ? 'INATIVO' : 'ATIVO';
+    abaOp.getRange(linha, colMap.idxStatus + 1).setValue(statusFormatado);
+    if (statusFormatado === 'INATIVO') {
+      desativarOperadorSessoes(matLimpa);
+    }
+  }
+
+  // Atualiza Senha se fornecida
+  if (novaSenha && String(novaSenha).length > 0) {
+    if (String(novaSenha).length < CONFIG.TAMANHO_MINIMO_SENHA) {
+      return responderJSON({
+        sucesso: false,
+        erro: 'A nova senha deve conter no mínimo ' + CONFIG.TAMANHO_MINIMO_SENHA + ' caracteres.'
+      });
+    }
+    var novoSalt = gerarSaltHex256Bits();
+    var novoHash = pbkdf2HmacSha256(novaSenha, novoSalt, CONFIG.ITERACOES_PBKDF2);
+    abaOp.getRange(linha, colMap.idxHash + 1).setValue(novoHash);
+    abaOp.getRange(linha, colMap.idxSalt + 1).setValue(novoSalt);
+    // Revoga sessões ativas com senha anterior
+    desativarOperadorSessoes(matLimpa);
+  }
+
+  return responderJSON({
+    sucesso: true,
+    mensagem: 'Dados do operador ' + matLimpa + ' atualizados com sucesso.'
+  });
+}
+
+/**
+ * ROTA ADMIN 6: Alternar Status do Operador (ATIVO / INATIVO)
+ */
+function rotaAdminAlternarStatus(adminToken, matricula, statusDesejado) {
+  var auth = validarSessaoAdmin(adminToken);
+  if (!auth.valido) {
+    return responderJSON({ sucesso: false, sessaoExpirada: true, erro: auth.motivo });
+  }
+
+  var matLimpa = String(matricula || '').trim().toUpperCase();
+  var ss = obterPlanilha();
+  var abaOp = ss.getSheetByName(CONFIG.ABA_OPERADORES);
+  if (!abaOp) return responderJSON({ sucesso: false, erro: 'Aba Operadores não encontrada.' });
+
+  var dados = abaOp.getDataRange().getValues();
+  var colMap = mapearColunasOperadores(dados[0]);
+  var linha = -1;
+
+  for (var i = 1; i < dados.length; i++) {
+    var rawMat = dados[i][colMap.idxMatricula];
+    if (rawMat != null && String(rawMat).trim().toUpperCase() === matLimpa) {
+      linha = i + 1;
+      break;
+    }
+  }
+
+  if (linha === -1) {
+    return responderJSON({ sucesso: false, erro: 'Operador não localizado.' });
+  }
+
+  var novoStatus = String(statusDesejado || '').trim().toUpperCase() === 'INATIVO' ? 'INATIVO' : 'ATIVO';
+  if (colMap.idxStatus !== -1) {
+    abaOp.getRange(linha, colMap.idxStatus + 1).setValue(novoStatus);
+  }
+
+  if (novoStatus === 'INATIVO') {
+    desativarOperadorSessoes(matLimpa);
+  }
+
+  return responderJSON({
+    sucesso: true,
+    status: novoStatus,
+    mensagem: 'Operador ' + matLimpa + ' agora está ' + novoStatus + '.'
+  });
+}
+
+/**
+ * ROTA ADMIN 7: Alterar Senha do Próprio Administrador
+ */
+function rotaAdminAlterarSenhaPropria(adminToken, novaSenha) {
+  var auth = validarSessaoAdmin(adminToken);
+  if (!auth.valido) {
+    return responderJSON({ sucesso: false, sessaoExpirada: true, erro: auth.motivo });
+  }
+
+  if (!novaSenha || String(novaSenha).length < CONFIG.TAMANHO_MINIMO_SENHA) {
+    return responderJSON({
+      sucesso: false,
+      erro: 'A nova senha administrativa deve conter no mínimo ' + CONFIG.TAMANHO_MINIMO_SENHA + ' caracteres.'
+    });
+  }
+
+  var salt = gerarSaltHex256Bits();
+  var hash = pbkdf2HmacSha256(novaSenha, salt, CONFIG.ITERACOES_PBKDF2);
+
+  var props = PropertiesService.getScriptProperties();
+  props.setProperties({
+    'ADMIN_HASH': hash,
+    'ADMIN_SALT': salt,
+    'ADMIN_ATUALIZADO_EM': String(new Date().getTime())
+  });
+
+  return responderJSON({
+    sucesso: true,
+    mensagem: 'Senha administrativa alterada com sucesso!'
+  });
+}
+
+/**
+ * Configura ou redefine a senha do Administrador interativamente pelo menu do Google Sheets
+ */
+function configurarAdminViaPrompt() {
+  var ui = SpreadsheetApp.getUi();
+  var adminAtual = obterCredenciaisAdmin();
+
+  var respMat = ui.prompt(
+    'Configuração do Administrador',
+    'Digite a Matrícula do Administrador (atual: ' + adminAtual.matricula + '):',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (respMat.getSelectedButton() !== ui.Button.OK) return;
+  var matricula = respMat.getResponseText().trim() || adminAtual.matricula;
+
+  var respSenha = ui.prompt(
+    'Configuração do Administrador',
+    'Digite a NOVA Senha do Administrador (mínimo de ' + CONFIG.TAMANHO_MINIMO_SENHA + ' caracteres):',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (respSenha.getSelectedButton() !== ui.Button.OK) return;
+  var novaSenha = respSenha.getResponseText();
+
+  if (!novaSenha || novaSenha.length < CONFIG.TAMANHO_MINIMO_SENHA) {
+    ui.alert('Erro', 'A senha deve conter no mínimo ' + CONFIG.TAMANHO_MINIMO_SENHA + ' caracteres.', ui.ButtonSet.OK);
+    return;
+  }
+
+  try {
+    configurarAdmin(matricula, novaSenha);
+    ui.alert(
+      'Sucesso',
+      'Credenciais do Administrador atualizadas com sucesso!\n\nMatrícula: ' + matricula.toUpperCase() + '\nA senha foi protegida com PBKDF2 e Salt de 256 bits em ScriptProperties.',
+      ui.ButtonSet.OK
+    );
+  } catch (err) {
+    ui.alert('Erro', err.message, ui.ButtonSet.OK);
+  }
+}
+

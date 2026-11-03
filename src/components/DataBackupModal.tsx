@@ -43,6 +43,7 @@ import {
   SafeDiagnostics,
   runSafeDiagnostic,
 } from '../utils/sheetsAuthSync';
+import { AdminOperatorsManager } from './AdminOperatorsManager';
 
 interface DataBackupModalProps {
   isOpen: boolean;
@@ -62,7 +63,7 @@ interface DataBackupModalProps {
   onUpdateProducts?: (restored: Product[]) => void;
 }
 
-type TabType = 'exportCsv' | 'importCsv' | 'fullBackup' | 'sheetsSync';
+type TabType = 'exportCsv' | 'importCsv' | 'fullBackup' | 'sheetsSync' | 'adminPanel';
 type DuplicateMode = 'merge' | 'skipDuplicates' | 'replace';
 
 export const DataBackupModal: React.FC<DataBackupModalProps> = ({
@@ -338,10 +339,12 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg sm:text-xl font-bold text-white leading-tight">
-                Nuvem Sheets
+                {activeTab === 'adminPanel' ? 'Área do Administrador' : 'Nuvem Sheets'}
               </h3>
               <p className="text-xs text-slate-400">
-                Sincronização com planilha Google Sheets
+                {activeTab === 'adminPanel'
+                  ? 'Cadastro antecipado e gestão de operadores'
+                  : 'Sincronização com planilha Google Sheets'}
               </p>
             </div>
           </div>
@@ -355,15 +358,32 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
           </button>
         </div>
 
-        {/* Aba Nuvem Sheets */}
-        <div className="flex p-1 bg-slate-950 border border-slate-800 rounded-2xl my-3 shrink-0">
+        {/* Abas Nuvem Sheets e Área do Administrador */}
+        <div className="grid grid-cols-2 p-1 bg-slate-950 border border-slate-800 rounded-2xl my-3 shrink-0 gap-1">
           <button
             type="button"
             onClick={() => setActiveTab('sheetsSync')}
-            className="w-full py-2 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all bg-emerald-400 text-slate-950 shadow-md shadow-emerald-400/20"
+            className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
+              activeTab === 'sheetsSync'
+                ? 'bg-emerald-400 text-slate-950 shadow-md shadow-emerald-400/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+            }`}
           >
             <Cloud className="w-4 h-4 shrink-0" />
             <span className="truncate">Nuvem Sheets</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('adminPanel')}
+            className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
+              activeTab === 'adminPanel'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 shrink-0 text-indigo-300" />
+            <span className="truncate">Administrador</span>
           </button>
         </div>
 
@@ -1102,6 +1122,13 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {/* ==================================================== */}
+          {/* ABA 5: ÁREA EXCLUSIVA DO ADMINISTRADOR (OPERADORES) */}
+          {/* ==================================================== */}
+          {activeTab === 'adminPanel' && (
+            <AdminOperatorsManager apiUrl={apiUrl} />
           )}
         </div>
 
